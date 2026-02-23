@@ -70,9 +70,15 @@ export class VehiclesController {
 
   // GET /api/vehicles - Listado completo con filtros
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.ATTENDANT)
-  getAllVehicles(@Query() filters: FilterVehiclesDto) {
-    return this.vehiclesService.getAllVehicles(filters);
+  @Roles(UserRole.ADMIN, UserRole.ATTENDANT, UserRole.MANAGER)
+  getAllVehicles(
+    @CurrentUser() user: any,
+    @Query() filters: FilterVehiclesDto,
+  ) {
+    const companyIds =
+      user.companyUsers?.map((cu: any) => cu.company?.id).filter(Boolean) || [];
+
+    return this.vehiclesService.getAllVehicles(filters, companyIds);
   }
 
   @Get(":id")

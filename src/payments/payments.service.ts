@@ -4,7 +4,7 @@ import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { CreatePaymentMethodDto } from "./dto/create-payment-method.dto";
 import { UpdatePaymentStatusDto } from "./dto/update-payment-status.dto";
 import { FilterPaymentDto } from "./dto/filter-payment.dto";
-import { PaymentStatus, Prisma } from "@prisma/client";
+import { PaymentStatus, Prisma, PlanType, FeeType } from "@prisma/client";
 
 @Injectable()
 export class PaymentsService {
@@ -194,5 +194,161 @@ export class PaymentsService {
       where: { isActive: true },
       orderBy: { createdAt: "desc" },
     });
+  }
+
+  async processExpiredPlans() {
+    const now = new Date();
+    const oneMonthAgo = new Date(now);
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+    // Obtener todos los planes activos
+    const activePlans = await this.prisma.companyPlan.findMany({
+      where: {
+        isActive: true,
+        deletedAt: null,
+      },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        companyInvoices: {
+          orderBy: {
+            periodEnd: "desc",
+          },
+          take: 1,
+        },
+      },
+    });
+
+    const result = {
+      processedPlans: 0,
+      createdInvoices: 0,
+      skippedPlans: 0,
+      errors: [] as Array<{ companyPlanId: string; error: string }>,
+      invoices: [] as Array<{
+        id: string;
+        companyPlanId: string;
+        companyName: string;
+        amountUSD: number;
+        periodStart: Date;
+        periodEnd: Date;
+      }>,
+    };
+
+    for (const plan of activePlans) {
+      result.processedPlans++;
+
+      try {
+        // Determinar el período a facturar
+        let periodStart: Date;
+        let periodEnd: Date;
+
+        if (plan.companyInvoices.length > 0) {
+          const lastInvoice = plan.companyInvoices[0];
+          // Si el último invoice no ha vencido (su periodEnd es futuro), saltar
+          if (lastInvoice.periodEnd && lastInvoice.periodEnd > now) {
+            result.skippedPlans++;
+            continue;
+          }
+          // Nuevo período inicia donde terminó el anterior
+          periodStart = lastInvoice.periodEnd || lastInvoice.createdAt;
+        } else {
+          // Primer invoice, usar fecha de creación del plan
+          periodStart = plan.createdAt;
+        }
+
+        // El período termina un mes después del inicio
+        periodEnd = new Date(periodStart);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+        // Si el período aún no ha vencido, saltar
+        if (periodEnd > now) {
+          result.skippedPlans++;
+          continue;
+        }
+
+        // Calcular el monto según el tipo de plan
+        let baseAmount = 0;
+        let vehicleAmount = 0;
+        let feeAmount = 0;
+        let vehicleCount = 0;
+
+        // Contar vehículos activos en el período
+        vehicleCount = await this.prisma.parkingRecord.count({
+          where: {
+            companyId: plan.company.id,
+            checkInAt: {
+              gte: periodStart,
+              lte: periodEnd,
+            },
+          },
+        });
+
+        switch (plan.planType) {
+          case PlanType.FLAT_RATE:
+            baseAmount = plan.flatRate || 0;
+            break;
+
+          case PlanType.PER_VEHICLE:
+            vehicleAmount = (plan.perVehicleRate || 0) * vehicleCount;
+            break;
+
+          case PlanType.MIXED:
+            baseAmount = plan.basePrice || 0;
+            vehicleAmount = (plan.perVehicleRate || 0) * vehicleCount;
+            break;
+        }
+
+        // Calcular fee si existe
+        const subtotal = baseAmount + vehicleAmount;
+        if (plan.feeType && plan.feeValue) {
+          if (plan.feeType === FeeType.PERCENTAGE) {
+            feeAmount = subtotal * (plan.feeValue / 100);
+          } else if (plan.feeType === FeeType.FIXED) {
+            feeAmount = plan.feeValue * vehicleCount;
+          }
+        }
+
+        const totalAmount = subtotal + feeAmount;
+
+        // Crear el invoice
+        const invoice = await this.prisma.companyInvoice.create({
+          data: {
+            companyPlanId: plan.id,
+            amountUSD: totalAmount,
+            status: PaymentStatus.PENDING,
+            validation: "MANUAL",
+            planType: plan.planType,
+            vehicleCount,
+            baseAmount,
+            vehicleAmount,
+            feeAmount,
+            periodStart,
+            periodEnd,
+            note: `Invoice automático generado para período ${periodStart.toISOString()} - ${periodEnd.toISOString()}`,
+          },
+        });
+
+        result.createdInvoices++;
+        result.invoices.push({
+          id: invoice.id,
+          companyPlanId: plan.id,
+          companyName: plan.company.name,
+          amountUSD: totalAmount,
+          periodStart,
+          periodEnd,
+        });
+      } catch (error) {
+        result.errors.push({
+          companyPlanId: plan.id,
+          error: error.message || "Error desconocido",
+        });
+      }
+    }
+
+    return result;
   }
 }

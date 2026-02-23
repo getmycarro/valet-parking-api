@@ -259,7 +259,7 @@ export class VehiclesService {
     return parkingRecord;
   }
 
-  async getAllVehicles(options: FilterVehiclesDto) {
+  async getAllVehicles(options: FilterVehiclesDto, companyIds: string[] = []) {
     const page = options.page || 1;
     const limit = options.limit || 20;
     const skip = (page - 1) * limit;
@@ -268,6 +268,8 @@ export class VehiclesService {
 
     if (options.companyId != null) {
       where.companyId = options.companyId;
+    } else {
+      where.companyId = { in: companyIds };
     }
     if (options.status === "active") {
       where.checkOutAt = null;
@@ -349,7 +351,7 @@ export class VehiclesService {
             payments: true,
           },
           orderBy: {
-            checkInAt: "desc",
+            createdAt: "desc",
           },
         }),
         this.prisma.parkingRecord.count({

@@ -13,6 +13,7 @@ import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { CreatePaymentMethodDto } from "./dto/create-payment-method.dto";
 import { UpdatePaymentStatusDto } from "./dto/update-payment-status.dto";
 import { Roles } from "../common/decorators/roles.decorator";
+import { Public } from "../common/decorators/public.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { UserRole } from "@prisma/client";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -57,5 +58,12 @@ export class PaymentsController {
   @Roles(UserRole.ADMIN, UserRole.ATTENDANT)
   getPaymentMethods() {
     return this.paymentsService.getPaymentMethods();
+  }
+
+  // Endpoint público para cronjob - no requiere autenticación
+  @Public()
+  @Post("process-expired-plans")
+  processExpiredPlans() {
+    return this.paymentsService.processExpiredPlans();
   }
 }
