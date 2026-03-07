@@ -15,7 +15,7 @@ import * as bcrypt from "bcrypt";
 export class VehiclesService {
   constructor(private prisma: PrismaService) {}
 
-  async registerVehicle(dto: RegisterVehicleDto, registerRecordId: string) {
+  async registerVehicle(dto: RegisterVehicleDto, registerRecordId: string, companyId?: string) {
     // 1. Verificar si el auto ya tiene un check-in activo
     const existingRecord = await this.prisma.parkingRecord.findFirst({
       where: {
@@ -85,6 +85,7 @@ export class VehiclesService {
           ownerId: user.id,
           registerRecordId,
           checkInValetId,
+          companyId: companyId || undefined,
         },
       });
 
@@ -124,6 +125,7 @@ export class VehiclesService {
         ownerId: newUser.id,
         registerRecordId,
         checkInValetId,
+        companyId: companyId || undefined,
       },
     });
 

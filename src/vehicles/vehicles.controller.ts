@@ -34,7 +34,13 @@ export class VehiclesController {
     @Body() dto: RegisterVehicleDto,
     @CurrentUser() user: any,
   ) {
-    const result = await this.vehiclesService.registerVehicle(dto, user.id);
+    let companyId = dto.companyId;
+
+    if (!companyId && (user.role === UserRole.MANAGER || user.role === UserRole.ATTENDANT)) {
+      companyId = user.companyUsers?.[0]?.company?.id;
+    }
+
+    const result = await this.vehiclesService.registerVehicle(dto, user.id, companyId);
     if (result.isNewUser && dto.email) {
       await this.email.sendEmail({
         templateId: emailTemplates.welcomeEmail,

@@ -1,5 +1,5 @@
 import { IsOptional, IsString, IsNumber, IsBoolean } from "class-validator";
-import { Type } from "class-transformer";
+import { Type, Transform } from "class-transformer";
 
 export class FilterCompaniesDto {
   @IsOptional()
@@ -17,6 +17,7 @@ export class FilterCompaniesDto {
   name?: string;
 
   @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   isActive?: boolean;
 
