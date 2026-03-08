@@ -74,6 +74,12 @@ export class VehiclesController {
     return this.vehiclesService.getMyActiveParkingRecords(user.id);
   }
 
+  @Get("history")
+  @Roles(UserRole.CLIENT)
+  getParkingHistory(@CurrentUser() user: any) {
+    return this.vehiclesService.getParkingHistory(user.id);
+  }
+
   // GET /api/vehicles - Listado completo con filtros
   @Get()
   @Roles(UserRole.ADMIN, UserRole.ATTENDANT, UserRole.MANAGER)

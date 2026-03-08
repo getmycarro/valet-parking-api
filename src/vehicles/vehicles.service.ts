@@ -406,4 +406,43 @@ export class VehiclesService {
       orderBy: { checkInAt: "desc" },
     });
   }
+
+  async getParkingHistory(userId: string) {
+    const records = await this.prisma.parkingRecord.findMany({
+      where: { ownerId: userId, checkOutAt: { not: null } },
+      include: {
+        payments: { select: { amountUSD: true, tip: true } },
+        company: { select: { id: true, name: true, photoUrl: true } },
+      },
+      orderBy: { checkOutAt: "desc" },
+    });
+
+    return records.map((record) => {
+      const totalPaid = record.payments.reduce(
+        (sum, p) => sum + p.amountUSD + p.tip,
+        0,
+      );
+
+      const checkIn = new Date(record.checkInAt);
+      const checkOut = new Date(record.checkOutAt!);
+      const diffMs = checkOut.getTime() - checkIn.getTime();
+      const totalMinutes = Math.floor(diffMs / 60000);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      const duration = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+      return {
+        id: record.id,
+        plate: record.plate,
+        description: [record.brand, record.model, record.color]
+          .filter(Boolean)
+          .join(" "),
+        totalPaid,
+        checkInAt: record.checkInAt,
+        checkOutAt: record.checkOutAt,
+        duration,
+        company: record.company,
+      };
+    });
+  }
 }

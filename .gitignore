@@ -40,6 +40,5 @@ lerna-debug.log*
 .env.*.local
 
 # Prisma
-prisma/migrations
-
+# Note: prisma/migrations must be committed so Render can run `prisma migrate deploy`
 /generated/prisma
