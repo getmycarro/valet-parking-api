@@ -25,6 +25,7 @@
   "license": "ISC",
   "description": "NestJS API for Valet Parking System with Prisma and PostgreSQL",
   "dependencies": {
+    "@nestjs/cli": "^11.0.16",
     "@nestjs/common": "^11.1.13",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.1.13",
@@ -39,11 +40,11 @@
     "class-validator": "^0.14.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "prisma": "^6.9.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11.0.16",
     "@nestjs/schematics": "^11.0.9",
     "@nestjs/testing": "^11.1.13",
     "@types/bcrypt": "^6.0.0",
@@ -53,7 +54,6 @@
     "@typescript-eslint/parser": "^8.54.0",
     "dotenv": "^17.2.4",
     "eslint": "^9.39.2",
-    "prisma": "^6.9.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
