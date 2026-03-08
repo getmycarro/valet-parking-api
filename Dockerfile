@@ -2,12 +2,19 @@ FROM node:22-slim
 
 WORKDIR /app
 
+# Install OpenSSL required by Prisma on slim images
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
 RUN npm install
 
-COPY . .
+COPY prisma ./prisma
 
-RUN npm run build && npx prisma generate
+# Generate Prisma client BEFORE compiling TypeScript
+RUN npx prisma generate
+
+COPY . .
+RUN npm run build
 
 EXPOSE 10000
 
