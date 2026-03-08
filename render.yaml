@@ -1,11 +1,10 @@
 services:
   - type: web
     name: valet-parking-api
-    env: node
+    env: docker
     region: oregon
     plan: free
-    buildCommand: npm install && npm run build && npx prisma generate
-    startCommand: npx prisma migrate deploy && node dist/main.js
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /api
     envVars:
       - key: NODE_ENV
