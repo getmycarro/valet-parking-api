@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // Enums
@@ -46,6 +47,20 @@ enum FeeType {
   FIXED // Fee fijo (ej: $2 por vehículo)
 }
 
+enum NotificationType {
+  PAYMENT_REGISTERED
+  PAYMENT_EXPIRED
+  CHECKOUT_REQUEST
+  OBJECT_SEARCH_REQUEST
+}
+
+enum RequestStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 model Company {
   id       String  @id @default(cuid())
   name     String
@@ -60,6 +75,7 @@ model Company {
   companyUsers   CompanyUser[]
   parkingRecords ParkingRecord[]
   plans          CompanyPlan[]
+  notifications  Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -100,11 +116,13 @@ model User {
   deletedAt   DateTime?
   deletedById String?
 
-  ownedVehicles   Vehicle[]       @relation("VehicleOwner")
-  payments        Payment[]       @relation("ProcessedBy")
-  registerRecords ParkingRecord[] @relation("RegisterRecord")
-  parkingRecords  ParkingRecord[]
-  companyUsers    CompanyUser[]
+  ownedVehicles          Vehicle[]        @relation("VehicleOwner")
+  payments               Payment[]        @relation("ProcessedBy")
+  registerRecords        ParkingRecord[]  @relation("RegisterRecord")
+  parkingRecords         ParkingRecord[]
+  companyUsers           CompanyUser[]
+  triggeredNotifications Notification[]   @relation("TriggeredNotifications")
+  vehicleRequests        VehicleRequest[] @relation("VehicleRequestedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -162,7 +180,8 @@ model ParkingRecord {
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id])
 
-  payments Payment[]
+  payments        Payment[]
+  vehicleRequests VehicleRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -174,6 +193,31 @@ model ParkingRecord {
   @@index([ownerId])
   @@index([companyId])
   @@map("parking_records")
+}
+
+model VehicleRequest {
+  id                String        @id @default(cuid())
+  objectDescription String
+  notes             String?       @db.Text
+  status            RequestStatus @default(PENDING)
+
+  parkingRecordId String
+  parkingRecord   ParkingRecord @relation(fields: [parkingRecordId], references: [id])
+
+  companyId String
+
+  requestedById String?
+  requestedBy   User?   @relation("VehicleRequestedBy", fields: [requestedById], references: [id])
+
+  resolvedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parkingRecordId])
+  @@index([companyId])
+  @@index([status])
+  @@map("vehicle_requests")
 }
 
 model PaymentMethod {
@@ -291,4 +335,24 @@ model CompanyUser {
   @@index([userId])
   @@index([companyId])
   @@map("company_users")
+}
+
+model Notification {
+  id            String           @id @default(cuid())
+  type          NotificationType
+  title         String
+  message       String           @db.Text
+  data          Json?
+  isRead        Boolean          @default(false)
+  companyId     String
+  company       Company          @relation(fields: [companyId], references: [id])
+  triggeredById String?
+  triggeredBy   User?            @relation("TriggeredNotifications", fields: [triggeredById], references: [id])
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([companyId])
+  @@index([companyId, isRead])
+  @@index([companyId, type])
+  @@map("notifications")
 }

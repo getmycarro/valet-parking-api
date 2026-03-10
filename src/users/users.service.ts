@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
-import { UpdateUserDto, UpdateProfileDto } from "./dto/update-user.dto";
+import { UpdateUserDto, UpdateProfileDto, UpdateMeDto } from "./dto/update-user.dto";
 import { FilterUsersDto } from "./dto/filter-users.dto";
 import { Prisma, UserRole } from "@prisma/client";
 import * as bcrypt from "bcrypt";
@@ -269,6 +269,37 @@ export class UsersService {
         phone: dto.phone,
         photoUrl: dto.photoUrl,
       },
+      select: USER_SELECT,
+    });
+  }
+
+  // ── 8. Editar mi cuenta (password, idNumber, name) ────
+  async updateMe(userId: string, dto: UpdateMeDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (dto.newPassword) {
+      if (!dto.currentPassword) {
+        throw new BadRequestException('currentPassword is required to change password');
+      }
+      const isValid = await bcrypt.compare(dto.currentPassword, user.password);
+      if (!isValid) {
+        throw new BadRequestException('Current password is incorrect');
+      }
+    }
+
+    if (dto.idNumber && dto.idNumber !== user.idNumber) {
+      await this.validateUniqueFields(undefined, dto.idNumber);
+    }
+
+    const updateData: any = {};
+    if (dto.name) updateData.name = dto.name;
+    if (dto.idNumber) updateData.idNumber = dto.idNumber;
+    if (dto.newPassword) updateData.password = await bcrypt.hash(dto.newPassword, 10);
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: updateData,
       select: USER_SELECT,
     });
   }

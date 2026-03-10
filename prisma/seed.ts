@@ -500,7 +500,7 @@ async function main() {
     const client = await prisma.user.create({
       data: {
         email: `cliente${i}@mail.com`,
-        password: await hash(idNum),
+        password: await hash("123456"),
         name,
         role: UserRole.CLIENT,
         phone: `04${randomBetween(12, 26)}-${randomBetween(1000000, 9999999)}`,

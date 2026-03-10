@@ -13,6 +13,9 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
 import { EmailService } from "./email/email.service";
 import { CompaniesModule } from "./companies/companies.module";
 import { UsersModule } from "./users/users.module";
+import { NotificationsModule } from "./notifications/notifications.module";
+import { SupabaseModule } from "./supabase/supabase.module";
+import { RequestsModule } from "./requests/requests.module";
 
 @Module({
   imports: [
@@ -27,6 +30,9 @@ import { UsersModule } from "./users/users.module";
     EmployeesModule,
     CompaniesModule,
     UsersModule,
+    NotificationsModule,
+    SupabaseModule,
+    RequestsModule,
   ],
   controllers: [],
   providers: [

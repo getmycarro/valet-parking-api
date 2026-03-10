@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { CreatePaymentMethodDto } from "./dto/create-payment-method.dto";
 import { UpdatePaymentStatusDto } from "./dto/update-payment-status.dto";
@@ -8,7 +9,10 @@ import { PaymentStatus, Prisma, PlanType, FeeType } from "@prisma/client";
 
 @Injectable()
 export class PaymentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   async createPayment(dto: CreatePaymentDto, userId: string) {
     const payment = await this.prisma.payment.create({
@@ -36,6 +40,18 @@ export class PaymentsService {
         },
       },
     });
+
+    // Fire notification (non-blocking, non-throwing)
+    if (payment.parkingRecord?.companyId) {
+      void this.notifications.create({
+        type: 'PAYMENT_REGISTERED',
+        title: 'Pago registrado',
+        message: `Se registró un pago de $${payment.amountUSD} para la placa ${payment.parkingRecord.plate}`,
+        data: { paymentId: payment.id, amountUSD: payment.amountUSD, plate: payment.parkingRecord.plate },
+        companyId: payment.parkingRecord.companyId,
+        triggeredById: userId,
+      });
+    }
 
     return payment;
   }
@@ -340,6 +356,15 @@ export class PaymentsService {
           amountUSD: totalAmount,
           periodStart,
           periodEnd,
+        });
+
+        // Fire notification (non-blocking, non-throwing)
+        void this.notifications.create({
+          type: 'PAYMENT_EXPIRED',
+          title: 'Plan vencido — factura generada',
+          message: `Se generó una factura de $${totalAmount.toFixed(2)} para ${plan.company.name}`,
+          data: { invoiceId: invoice.id, companyPlanId: plan.id, amountUSD: totalAmount, periodStart, periodEnd },
+          companyId: plan.company.id,
         });
       } catch (error) {
         result.errors.push({

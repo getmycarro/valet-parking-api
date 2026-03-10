@@ -10,7 +10,7 @@ import {
 } from "@nestjs/common";
 import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
-import { UpdateUserDto, UpdateProfileDto } from "./dto/update-user.dto";
+import { UpdateUserDto, UpdateProfileDto, UpdateMeDto } from "./dto/update-user.dto";
 import { FilterUsersDto } from "./dto/filter-users.dto";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
@@ -41,6 +41,12 @@ export class UsersController {
   @Patch("me")
   updateProfile(@Body() dto: UpdateProfileDto, @CurrentUser() user: any) {
     return this.usersService.updateProfile(user.id, dto);
+  }
+
+  // 8. Editar mi cuenta (password, idNumber, name) — cualquier usuario autenticado
+  @Patch("me/account")
+  updateMe(@Body() dto: UpdateMeDto, @CurrentUser() user: any) {
+    return this.usersService.updateMe(user.id, dto);
   }
 
   // 4. Listar mis empleados — ADMIN
