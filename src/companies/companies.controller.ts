@@ -18,6 +18,8 @@ import { UserRole } from "@prisma/client";
 import { FilterCompaniesDto } from "./dto/filter-companies.dto";
 import { CurrentUser } from "src/common/decorators/current-user.decorator";
 import { UpdateStatusCompanyInvoiceDto } from "./dto/update-status-company-invoice.dto";
+import { CreatePaymentMethodDto } from "../payments/dto/create-payment-method.dto";
+import { UpdatePaymentMethodDto } from "../payments/dto/update-payment-method.dto";
 
 @Controller("companies")
 export class CompaniesController {
@@ -83,5 +85,30 @@ export class CompaniesController {
     @Body() dto: UpdateStatusCompanyInvoiceDto,
   ) {
     return this.companiesService.updateStatusInvoice(planId, invoiceId, dto);
+  }
+
+  @Get(":companyId/payment-methods")
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.CLIENT)
+  getPaymentMethods(@Param("companyId") companyId: string) {
+    return this.companiesService.getPaymentMethods(companyId);
+  }
+
+  @Post(":companyId/payment-methods")
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  createPaymentMethod(
+    @Param("companyId") companyId: string,
+    @Body() dto: CreatePaymentMethodDto,
+  ) {
+    return this.companiesService.createPaymentMethod(companyId, dto);
+  }
+
+  @Patch(":companyId/payment-methods/:methodId")
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  updatePaymentMethod(
+    @Param("companyId") companyId: string,
+    @Param("methodId") methodId: string,
+    @Body() dto: UpdatePaymentMethodDto,
+  ) {
+    return this.companiesService.updatePaymentMethod(companyId, methodId, dto);
   }
 }

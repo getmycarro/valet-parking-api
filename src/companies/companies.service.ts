@@ -7,6 +7,8 @@ import { PrismaService } from "src/prisma/prisma.service";
 import { FilterCompaniesDto } from "./dto/filter-companies.dto";
 import { Prisma } from "@prisma/client";
 import { UpdateStatusCompanyInvoiceDto } from "./dto/update-status-company-invoice.dto";
+import { CreatePaymentMethodDto } from "../payments/dto/create-payment-method.dto";
+import { UpdatePaymentMethodDto } from "../payments/dto/update-payment-method.dto";
 
 @Injectable()
 export class CompaniesService {
@@ -203,6 +205,50 @@ export class CompaniesService {
         deletedAt: new Date(),
         isActive: false,
       },
+    });
+  }
+
+  async getPaymentMethods(companyId: string) {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId, deletedAt: null },
+    });
+    if (!company) throw new NotFoundException("Company not found");
+
+    return this.prisma.paymentMethod.findMany({
+      where: { companyId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async createPaymentMethod(companyId: string, dto: CreatePaymentMethodDto) {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId, deletedAt: null },
+    });
+    if (!company) throw new NotFoundException("Company not found");
+
+    return this.prisma.paymentMethod.create({
+      data: {
+        name: dto.name,
+        form: dto.form,
+        type: dto.type,
+        companyId,
+      },
+    });
+  }
+
+  async updatePaymentMethod(
+    companyId: string,
+    methodId: string,
+    dto: UpdatePaymentMethodDto,
+  ) {
+    const method = await this.prisma.paymentMethod.findFirst({
+      where: { id: methodId, companyId, deletedAt: null },
+    });
+    if (!method) throw new NotFoundException("Payment method not found");
+
+    return this.prisma.paymentMethod.update({
+      where: { id: methodId },
+      data: dto,
     });
   }
 }

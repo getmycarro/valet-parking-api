@@ -209,6 +209,11 @@ export class PaymentsService {
     return this.prisma.paymentMethod.findMany({
       where: { isActive: true },
       orderBy: { createdAt: "desc" },
+      include: {
+        company: {
+          select: { id: true, name: true },
+        },
+      },
     });
   }
 
