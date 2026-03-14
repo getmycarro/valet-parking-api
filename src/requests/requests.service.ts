@@ -29,7 +29,6 @@ export class RequestsService {
         model: true,
         color: true,
         companyId: true,
-        userId: true,
         ownerId: true,
       },
     });
@@ -38,8 +37,7 @@ export class RequestsService {
       throw new NotFoundException('Parking record not found');
     }
 
-    const isOwner =
-      parkingRecord.userId === userId || parkingRecord.ownerId === userId;
+    const isOwner = parkingRecord.ownerId === userId;
 
     if (!isOwner) {
       throw new ForbiddenException(
