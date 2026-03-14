@@ -33,7 +33,7 @@ export class NotificationsService {
         },
       });
 
-      this.supabase.broadcast(`company-${dto.companyId}`, 'notification', notification);
+      await this.supabase.broadcast(`company-${dto.companyId}`, 'notification', notification);
 
       return notification;
     } catch (error) {
