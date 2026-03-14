@@ -47,7 +47,7 @@ export class PaymentsService {
         type: 'PAYMENT_REGISTERED',
         title: 'Pago registrado',
         message: `Se registró un pago de $${payment.amountUSD} para la placa ${payment.parkingRecord.plate}`,
-        data: { paymentId: payment.id, amountUSD: payment.amountUSD, plate: payment.parkingRecord.plate },
+        data: { paymentId: payment.id, parkingRecordId: payment.parkingRecordId, amountUSD: payment.amountUSD, plate: payment.parkingRecord.plate },
         companyId: payment.parkingRecord.companyId,
         triggeredById: userId,
       });
