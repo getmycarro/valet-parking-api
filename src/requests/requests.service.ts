@@ -18,17 +18,36 @@ export class RequestsService {
 
   async createObjectSearchRequest(
     dto: CreateObjectSearchRequestDto,
-    companyId: string,
     userId: string,
   ) {
     const parkingRecord = await this.prisma.parkingRecord.findUnique({
       where: { id: dto.parkingRecordId },
-      select: { id: true, plate: true, brand: true, model: true, color: true },
+      select: {
+        id: true,
+        plate: true,
+        brand: true,
+        model: true,
+        color: true,
+        companyId: true,
+        userId: true,
+        ownerId: true,
+      },
     });
 
     if (!parkingRecord) {
       throw new NotFoundException('Parking record not found');
     }
+
+    const isOwner =
+      parkingRecord.userId === userId || parkingRecord.ownerId === userId;
+
+    if (!isOwner) {
+      throw new ForbiddenException(
+        'You do not have access to this parking record',
+      );
+    }
+
+    const companyId = parkingRecord.companyId;
 
     const request = await this.prisma.vehicleRequest.create({
       data: {

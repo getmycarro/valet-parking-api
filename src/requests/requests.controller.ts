@@ -23,13 +23,12 @@ export class RequestsController {
   constructor(private requestsService: RequestsService) {}
 
   @Post('object-search')
-  @Roles(UserRole.ADMIN, UserRole.ATTENDANT, UserRole.CLIENT)
+  @Roles(UserRole.CLIENT)
   createObjectSearchRequest(
     @Body() dto: CreateObjectSearchRequestDto,
     @CurrentUser() user: any,
   ) {
-    const companyId = user.companyUsers?.[0]?.company?.id;
-    return this.requestsService.createObjectSearchRequest(dto, companyId, user.id);
+    return this.requestsService.createObjectSearchRequest(dto, user.id);
   }
 
   @Get()
