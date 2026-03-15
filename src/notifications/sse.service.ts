@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { Observable, Subject, merge, interval } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { MessageEvent } from '@nestjs/common';
@@ -15,10 +15,14 @@ export class SseService {
   }
 
   emit(companyId: string, data: Record<string, any>): void {
+    if (!companyId) return;
     this.subjects.get(companyId)?.next({ data });
   }
 
   getStream(companyId: string): Observable<MessageEvent> {
+    if (!companyId) {
+      throw new BadRequestException('User is not associated with a company');
+    }
     const notifications$ = this.getOrCreate(companyId).asObservable();
     // Heartbeat every 25s to keep the connection alive (browsers & Expo close idle SSE)
     const heartbeat$ = interval(25000).pipe(

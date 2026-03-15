@@ -121,49 +121,51 @@ export class NotificationsService {
     return { updated: result.count };
   }
 
-  async createCheckoutRequest(
-    dto: CheckoutRequestDto,
-    companyId: string,
-    userId: string,
-  ) {
+  async createCheckoutRequest(dto: CheckoutRequestDto, userId: string) {
     const parkingRecord = await this.prisma.parkingRecord.findUnique({
       where: { id: dto.parkingRecordId },
-      select: { plate: true, brand: true, model: true, color: true },
+      select: { plate: true, brand: true, model: true, color: true, companyId: true },
     });
 
-    const plate = parkingRecord?.plate ?? dto.parkingRecordId;
+    if (!parkingRecord) {
+      this.logger.warn(`createCheckoutRequest: parkingRecord ${dto.parkingRecordId} not found`);
+      return null;
+    }
+
+    const { companyId, ...vehicleInfo } = parkingRecord;
 
     return this.create({
       type: 'CHECKOUT_REQUEST',
       title: 'Solicitud de entrega de vehículo',
-      message: `Se solicitó la entrega del vehículo con placa ${plate}${dto.notes ? `: ${dto.notes}` : ''}`,
-      data: { parkingRecordId: dto.parkingRecordId, notes: dto.notes, ...parkingRecord },
+      message: `Se solicitó la entrega del vehículo con placa ${vehicleInfo.plate}${dto.notes ? `: ${dto.notes}` : ''}`,
+      data: { parkingRecordId: dto.parkingRecordId, notes: dto.notes, ...vehicleInfo },
       companyId,
       triggeredById: userId,
     });
   }
 
-  async createObjectSearchRequest(
-    dto: ObjectSearchRequestDto,
-    companyId: string,
-    userId: string,
-  ) {
+  async createObjectSearchRequest(dto: ObjectSearchRequestDto, userId: string) {
     const parkingRecord = await this.prisma.parkingRecord.findUnique({
       where: { id: dto.parkingRecordId },
-      select: { plate: true, brand: true, model: true, color: true },
+      select: { plate: true, brand: true, model: true, color: true, companyId: true },
     });
 
-    const plate = parkingRecord?.plate ?? dto.parkingRecordId;
+    if (!parkingRecord) {
+      this.logger.warn(`createObjectSearchRequest: parkingRecord ${dto.parkingRecordId} not found`);
+      return null;
+    }
+
+    const { companyId, ...vehicleInfo } = parkingRecord;
 
     return this.create({
       type: 'OBJECT_SEARCH_REQUEST',
       title: 'Solicitud de búsqueda de objeto',
-      message: `Se solicitó búsqueda de "${dto.objectDescription}" en vehículo con placa ${plate}${dto.notes ? `: ${dto.notes}` : ''}`,
+      message: `Se solicitó búsqueda de "${dto.objectDescription}" en vehículo con placa ${vehicleInfo.plate}${dto.notes ? `: ${dto.notes}` : ''}`,
       data: {
         parkingRecordId: dto.parkingRecordId,
         objectDescription: dto.objectDescription,
         notes: dto.notes,
-        ...parkingRecord,
+        ...vehicleInfo,
       },
       companyId,
       triggeredById: userId,

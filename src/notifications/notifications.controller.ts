@@ -70,8 +70,9 @@ export class NotificationsController {
     @Body() dto: CheckoutRequestDto,
     @CurrentUser() user: any,
   ) {
-    const companyId = user.companyUsers?.[0]?.company?.id;
-    return this.notificationsService.createCheckoutRequest(dto, companyId, user.id);
+    // companyId is derived from the parkingRecord, not the user token
+    // This allows CLIENT users (who have no company in their token) to trigger notifications
+    return this.notificationsService.createCheckoutRequest(dto, user.id);
   }
 
   @Post('object-search')
@@ -80,7 +81,7 @@ export class NotificationsController {
     @Body() dto: ObjectSearchRequestDto,
     @CurrentUser() user: any,
   ) {
-    const companyId = user.companyUsers?.[0]?.company?.id;
-    return this.notificationsService.createObjectSearchRequest(dto, companyId, user.id);
+    // companyId is derived from the parkingRecord, not the user token
+    return this.notificationsService.createObjectSearchRequest(dto, user.id);
   }
 }
