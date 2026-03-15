@@ -7,8 +7,12 @@ import {
   Body,
   Query,
   UseGuards,
+  Sse,
+  MessageEvent,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
 import { NotificationsService } from './notifications.service';
+import { SseService } from './sse.service';
 import { CheckoutRequestDto } from './dto/checkout-request.dto';
 import { ObjectSearchRequestDto } from './dto/object-search-request.dto';
 import { FilterNotificationsDto } from './dto/filter-notifications.dto';
@@ -20,7 +24,23 @@ import { UserRole } from '@prisma/client';
 @Controller('notifications')
 @UseGuards(RolesGuard)
 export class NotificationsController {
-  constructor(private notificationsService: NotificationsService) {}
+  constructor(
+    private notificationsService: NotificationsService,
+    private sseService: SseService,
+  ) {}
+
+  /**
+   * SSE stream — connect with:
+   *   Next.js  : new EventSource(`/api/notifications/stream?token=${jwt}`)
+   *   Expo RN  : new EventSource(`/api/notifications/stream?token=${jwt}`)
+   *              (requires react-native-sse: yarn add react-native-sse)
+   */
+  @Sse('stream')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
+  stream(@CurrentUser() user: any): Observable<MessageEvent> {
+    const companyId = user.companyUsers?.[0]?.company?.id;
+    return this.sseService.getStream(companyId);
+  }
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)

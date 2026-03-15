@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../supabase/supabase.service';
+import { SseService } from './sse.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { CheckoutRequestDto } from './dto/checkout-request.dto';
 import { ObjectSearchRequestDto } from './dto/object-search-request.dto';
@@ -18,6 +19,7 @@ export class NotificationsService {
   constructor(
     private prisma: PrismaService,
     private supabase: SupabaseService,
+    private sse: SseService,
   ) {}
 
   async create(dto: CreateNotificationDto) {
@@ -33,6 +35,10 @@ export class NotificationsService {
         },
       });
 
+      // Push via SSE (primary real-time channel)
+      this.sse.emit(dto.companyId, { type: 'notification', payload: notification });
+
+      // Supabase broadcast kept as secondary channel (no-op if not configured)
       await this.supabase.broadcast(`company-${dto.companyId}`, 'notification', notification);
 
       return notification;
