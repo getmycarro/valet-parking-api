@@ -38,8 +38,10 @@ export class NotificationsController {
   @Sse('stream')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
   stream(@CurrentUser() user: any): Observable<MessageEvent> {
-    const companyId = user.companyUsers?.[0]?.company?.id;
-    return this.sseService.getStream(companyId);
+    const companyIds: string[] = (user.companyUsers ?? []).map(
+      (cu: any) => cu.company?.id,
+    );
+    return this.sseService.getStream(companyIds);
   }
 
   @Get()

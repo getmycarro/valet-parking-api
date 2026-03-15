@@ -19,11 +19,14 @@ export class SseService {
     this.subjects.get(companyId)?.next({ data });
   }
 
-  getStream(companyId: string): Observable<MessageEvent> {
-    if (!companyId) {
-      throw new BadRequestException('User is not associated with a company');
+  getStream(companyIds: string[]): Observable<MessageEvent> {
+    const valid = companyIds.filter(Boolean);
+    if (!valid.length) {
+      throw new BadRequestException('User is not associated with any company');
     }
-    const notifications$ = this.getOrCreate(companyId).asObservable();
+    const notifications$ = merge(
+      ...valid.map((id) => this.getOrCreate(id).asObservable()),
+    );
     // Heartbeat every 25s to keep the connection alive (browsers & Expo close idle SSE)
     const heartbeat$ = interval(25000).pipe(
       map(() => ({ data: { type: 'heartbeat' } } as MessageEvent)),
