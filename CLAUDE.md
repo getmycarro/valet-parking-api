@@ -1,56 +1,47 @@
-# Valet Parking API - Documentación del Proyecto
+# Valet Parking API
 
-## 📋 Descripción General
+API backend NestJS + Prisma + PostgreSQL para sistema de valet parking.
 
-API backend completa en NestJS con Prisma y PostgreSQL que proporciona todos los servicios necesarios para el sistema de valet parking [valet-parking-system](../valet-parking-system).
+## Stack
 
-## 🎯 Objetivo
+- NestJS 10.x, TypeScript 5.x
+- Prisma 7.x + PostgreSQL 14+
+- JWT con Passport, class-validator
+- Puerto: 3001, prefijo: `/api`
 
-Reemplazar el sistema inseguro de localStorage del frontend Next.js con una API robusta que centraliza la lógica de negocio, implementa autenticación real con JWT, y permite operación multi-usuario.
+## Arquitectura
 
-## ✅ Estado del Proyecto
+```
+src/
+├── auth/        # JWT auth + RBAC (roles: ADMIN, ATTENDANT)
+├── common/      # Guards, decorators, filters, interceptors
+├── config/      # Configuracion de la app
+├── employees/   # Gestion de empleados
+├── payments/    # Pagos y metodos de pago
+├── prisma/      # Servicio Prisma
+├── reports/     # Reportes y analytics
+├── settings/    # Configuracion del sistema
+├── vehicles/    # Gestion de vehiculos (modulo critico)
+├── app.module.ts
+└── main.ts
+```
 
-### Completado
+## Modelos BD
 
-- ✅ Setup completo de NestJS con TypeScript
-- ✅ Configuración de Prisma con PostgreSQL
-- ✅ Schema de base de datos con 6 modelos principales
-- ✅ Sistema de autenticación JWT con Passport
-- ✅ Sistema de roles (RBAC) con guards y decorators
-- ✅ 6 módulos de dominio completamente implementados
-- ✅ 26+ endpoints REST funcionales
-- ✅ Validación automática con class-validator
-- ✅ Manejo de errores global
-- ✅ CORS configurado para Next.js
-- ✅ Seed de datos iniciales
-- ✅ Documentación completa en README.md
+User, Employee, Vehicle, PaymentMethod, Payment, Settings
 
-## 🏗️ Arquitectura
+## Comandos clave
 
-### Módulos Principales
+```bash
+npm run start:dev
+npm run prisma:migrate
+npm run prisma:seed
+npm run prisma:studio
+```
 
-1. **AuthModule** - Autenticación y autorización
-2. **EmployeesModule** - Gestión de empleados/asistentes
-3. **VehiclesModule** - Gestión de vehículos (módulo crítico)
-4. **PaymentsModule** - Sistema de pagos
-5. **SettingsModule** - Configuración del sistema
-6. **ReportsModule** - Reportes y analytics
+## Convenciones
 
-### Stack Tecnológico
-
-- **Framework**: NestJS 10.x
-- **ORM**: Prisma 7.x
-- **Base de datos**: PostgreSQL 14+
-- **Autenticación**: JWT con Passport
-- **Validación**: class-validator
-- **TypeScript**: 5.x
-
-## 🚀 Próximos Pasos
-
-1. Configurar PostgreSQL: `createdb valet_parking`
-2. Editar `.env` con credenciales de BD
-3. Ejecutar migraciones: `npm run prisma:migrate`
-4. Seed de datos: `npm run prisma:seed`
-5. Iniciar servidor: `npm run start:dev`
-
-Ver [README.md](./README.md) para instrucciones completas.
+- DTOs con class-validator en cada modulo
+- Guards: `@Roles(Role.ADMIN)` o `@Public()` para endpoints publicos
+- Soft delete en Employee
+- Ver README.md para endpoints completos y ejemplos curl
