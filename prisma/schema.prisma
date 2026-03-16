@@ -250,6 +250,7 @@ model Payment {
   parkingRecord   ParkingRecord  @relation(fields: [parkingRecordId], references: [id])
   reference       String? // Referencia del pago
   note            String?        @db.Text // Nota del pago
+  image           String?        @db.Text // Imagen del pago en base64
   fee             Float?
   validation      ValidationType
 

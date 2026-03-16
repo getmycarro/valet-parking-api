@@ -26,6 +26,7 @@ export class PaymentsService {
         status: dto.validation === "MANUAL" ? "RECEIVED" : "PENDING",
         reference: dto.reference,
         note: dto.note,
+        image: dto.image,
         processedById: userId,
       },
       include: {
