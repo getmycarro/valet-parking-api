@@ -47,6 +47,12 @@ enum FeeType {
   FIXED // Fee fijo (ej: $2 por vehículo)
 }
 
+enum ParkingRecordStatus {
+  UNPAID
+  PAID
+  FREE
+}
+
 enum NotificationType {
   PAYMENT_REGISTERED
   PAYMENT_EXPIRED
@@ -160,6 +166,7 @@ model ParkingRecord {
   model String? // Modelo copiado
   color String? // Color copiado
 
+  status     ParkingRecordStatus @default(UNPAID)
   checkInAt  DateTime  @default(now())
   checkOutAt DateTime?
   notes      String?   @db.Text

@@ -6,6 +6,7 @@ import {
   PaymentStatus,
   PlanType,
   FeeType,
+  ParkingRecordStatus,
 } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 
@@ -132,6 +133,7 @@ async function main() {
   console.log("Limpiando base de datos...");
   await prisma.payment.deleteMany();
   await prisma.companyInvoice.deleteMany();
+  await prisma.vehicleRequest.deleteMany();
   await prisma.parkingRecord.deleteMany();
   await prisma.vehicle.deleteMany();
   await prisma.companyPlan.deleteMany();
@@ -139,6 +141,7 @@ async function main() {
   await prisma.companyUser.deleteMany();
   await prisma.valet.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.notification.deleteMany();
   await prisma.company.deleteMany();
   console.log("Base de datos limpia.");
 
@@ -528,117 +531,136 @@ async function main() {
   // 10. PARKING RECORDS + PAYMENTS (45 dias de datos)
   // ────────────────────────────────────────────────────────
   const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const fortyFiveDaysAgo = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
 
   const companiesArr = [companyA, companyB, companyC];
-  // Distribucion de trafico: A=alta, B=media, C=alta
-  const recordsPerCompany: Record<string, number> = {
-    [companyA.id]: 180,
-    [companyB.id]: 100,
-    [companyC.id]: 150,
+
+  // Distribucion por status: A=alta, B=media, C=alta
+  const recordsPerCompany: Record<
+    string,
+    { free: number; paid: number; unpaid: number }
+  > = {
+    [companyA.id]: { free: 150, paid: 18, unpaid: 12 },
+    [companyB.id]: { free: 80, paid: 13, unpaid: 7 },
+    [companyC.id]: { free: 120, paid: 22, unpaid: 8 },
   };
 
   const parkingFees = [3, 5, 8, 10, 12, 15, 20];
+  const noteOptions = [
+    "Cliente VIP",
+    "Vehiculo con rayones previos",
+    "Estacionado en zona premium",
+    "Llave entregada en recepcion",
+    "Solicito lavado adicional",
+    "Recoger antes de las 6pm",
+  ];
   let totalRecords = 0;
 
   for (const company of companiesArr) {
     const companyValets = valetsByCompany[company.id];
     const companyAttendants = attendantsByCompany[company.id];
     const companyMethods = paymentMethodsMap[company.id];
-    const count = recordsPerCompany[company.id];
+    const counts = recordsPerCompany[company.id];
 
-    for (let i = 0; i < count; i++) {
-      const client = randomFrom(clients);
-      const vData = randomVehicle();
-      const checkInAt = randomDate(fortyFiveDaysAgo, now);
+    const recordTypes: Array<{ status: ParkingRecordStatus; count: number }> = [
+      { status: ParkingRecordStatus.FREE, count: counts.free },
+      { status: ParkingRecordStatus.PAID, count: counts.paid },
+      { status: ParkingRecordStatus.UNPAID, count: counts.unpaid },
+    ];
 
-      // 85% de los registros completados, 15% activos (sin checkout)
-      const isCompleted = Math.random() < 0.85;
-      const durationHours = randomBetween(1, 12);
-      const checkOutAt = isCompleted
-        ? new Date(checkInAt.getTime() + durationHours * 60 * 60 * 1000)
-        : null;
+    for (const { status, count } of recordTypes) {
+      for (let i = 0; i < count; i++) {
+        const client = randomFrom(clients);
+        const vData = randomVehicle();
+        const registerAttendant = randomFrom(companyAttendants);
+        const checkInValet = randomFrom(companyValets);
 
-      // Si el checkout es futuro, dejarlo sin checkout
-      const finalCheckOut = checkOutAt && checkOutAt <= now ? checkOutAt : null;
+        let checkInAt: Date;
+        let checkOutAt: Date | null = null;
+        let checkOutValetId: string | null = null;
 
-      const checkInValet = randomFrom(companyValets);
-      const checkOutValet = finalCheckOut ? randomFrom(companyValets) : null;
-      const registerAttendant = randomFrom(companyAttendants);
+        if (status === ParkingRecordStatus.FREE) {
+          // Siempre fechas pasadas
+          checkInAt = randomDate(fortyFiveDaysAgo, yesterday);
+          const durationHours = randomBetween(1, 12);
+          const tentativeCheckOut = new Date(
+            checkInAt.getTime() + durationHours * 60 * 60 * 1000,
+          );
+          checkOutAt = tentativeCheckOut < now ? tentativeCheckOut : yesterday;
+          checkOutValetId = randomFrom(companyValets).id;
+        } else {
+          // PAID y UNPAID: siempre hoy
+          checkInAt = new Date();
+        }
 
-      const parkingRecord = await prisma.parkingRecord.create({
-        data: {
-          plate: vData.plate,
-          brand: vData.brand,
-          model: vData.model,
-          color: vData.color,
-          checkInAt,
-          checkOutAt: finalCheckOut,
-          ownerId: client.id,
-          companyId: company.id,
-          registerRecordId: registerAttendant.id,
-          checkInValetId: checkInValet.id,
-          checkOutValetId: checkOutValet?.id ?? null,
-          notes:
-            Math.random() < 0.15
-              ? randomFrom([
-                  "Cliente VIP",
-                  "Vehiculo con rayones previos",
-                  "Estacionado en zona premium",
-                  "Llave entregada en recepcion",
-                  "Solicito lavado adicional",
-                  "Recoger antes de las 6pm",
-                ])
-              : null,
-        },
-      });
-
-      // Crear pago si el registro esta completado o tiene mas de 1h
-      const shouldHavePayment =
-        finalCheckOut || checkInAt.getTime() < now.getTime() - 60 * 60 * 1000;
-
-      if (shouldHavePayment && Math.random() < 0.92) {
-        const baseFee = randomFrom(parkingFees);
-        const hasTip = Math.random() < 0.35;
-        const tip = hasTip ? randomBetween(1, 5) : 0;
-        const method = randomFrom(companyMethods);
-
-        // 90% RECEIVED, 7% PENDING, 3% CANCELLED
-        const statusRoll = Math.random();
-        let status: PaymentStatus;
-        if (statusRoll < 0.9) status = PaymentStatus.RECEIVED;
-        else if (statusRoll < 0.97) status = PaymentStatus.PENDING;
-        else status = PaymentStatus.CANCELLED;
-
-        const paymentDate =
-          finalCheckOut ?? new Date(checkInAt.getTime() + 30 * 60 * 1000);
-
-        await prisma.payment.create({
+        const parkingRecord = await prisma.parkingRecord.create({
           data: {
-            amountUSD: baseFee,
-            tip,
+            plate: vData.plate,
+            brand: vData.brand,
+            model: vData.model,
+            color: vData.color,
             status,
-            date: paymentDate,
-            parkingRecordId: parkingRecord.id,
-            fee: baseFee * 0.1,
-            validation:
-              method.type === PaymentMethodType.CASH
-                ? ValidationType.MANUAL
-                : ValidationType.AUTOMATIC,
-            reference:
-              method.type === PaymentMethodType.CASH
-                ? null
-                : `REF-${randomBetween(100000, 999999)}`,
-            processedById: registerAttendant.id,
-            paymentMethodId: method.id,
+            checkInAt,
+            checkOutAt,
+            ownerId: client.id,
+            companyId: company.id,
+            registerRecordId: registerAttendant.id,
+            checkInValetId: checkInValet.id,
+            checkOutValetId,
+            notes: Math.random() < 0.15 ? randomFrom(noteOptions) : null,
           },
         });
-      }
 
-      totalRecords++;
+        // FREE: pago en su mayoría RECEIVED | PAID: pago RECEIVED (ya confirmado)
+        // UNPAID: sin pago
+        if (
+          status === ParkingRecordStatus.FREE ||
+          status === ParkingRecordStatus.PAID
+        ) {
+          const baseFee = randomFrom(parkingFees);
+          const tip = Math.random() < 0.35 ? randomBetween(1, 5) : 0;
+          const method = randomFrom(companyMethods);
+
+          const paymentStatus =
+            status === ParkingRecordStatus.FREE
+              ? Math.random() < 0.92
+                ? PaymentStatus.RECEIVED
+                : PaymentStatus.PENDING
+              : PaymentStatus.RECEIVED; // PAID siempre tiene pago confirmado
+
+          const paymentDate = checkOutAt ?? new Date();
+
+          await prisma.payment.create({
+            data: {
+              amountUSD: baseFee,
+              tip,
+              status: paymentStatus,
+              date: paymentDate,
+              parkingRecordId: parkingRecord.id,
+              fee: baseFee * 0.1,
+              validation:
+                method.type === PaymentMethodType.CASH
+                  ? ValidationType.MANUAL
+                  : ValidationType.AUTOMATIC,
+              reference:
+                method.type === PaymentMethodType.CASH
+                  ? null
+                  : `REF-${randomBetween(100000, 999999)}`,
+              processedById: registerAttendant.id,
+              paymentMethodId: method.id,
+            },
+          });
+        }
+
+        totalRecords++;
+      }
     }
 
-    console.log(`  ${company.name}: ${count} parking records creados.`);
+    const total = counts.free + counts.paid + counts.unpaid;
+    console.log(
+      `  ${company.name}: ${total} records (${counts.free} FREE, ${counts.paid} PAID, ${counts.unpaid} UNPAID).`,
+    );
   }
 
   console.log(`Total: ${totalRecords} parking records.`);

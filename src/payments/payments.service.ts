@@ -5,7 +5,7 @@ import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { CreatePaymentMethodDto } from "./dto/create-payment-method.dto";
 import { UpdatePaymentStatusDto } from "./dto/update-payment-status.dto";
 import { FilterPaymentDto } from "./dto/filter-payment.dto";
-import { PaymentStatus, Prisma, PlanType, FeeType } from "@prisma/client";
+import { PaymentStatus, ParkingRecordStatus, Prisma, PlanType, FeeType } from "@prisma/client";
 
 @Injectable()
 export class PaymentsService {
@@ -23,7 +23,9 @@ export class PaymentsService {
         tip: dto.tip || 0,
         fee: dto.fee,
         validation: dto.validation,
-        status: dto.validation === "MANUAL" ? "RECEIVED" : "PENDING",
+        // AUTOMATIC = gateway confirma solo → RECEIVED inmediato
+      // MANUAL    = humano aprueba desde el dashboard → PENDING hasta confirmación
+      status: dto.validation === "AUTOMATIC" ? "RECEIVED" : "PENDING",
         reference: dto.reference,
         note: dto.note,
         image: dto.image,
@@ -41,6 +43,17 @@ export class PaymentsService {
         },
       },
     });
+
+    // If payment is immediately RECEIVED (MANUAL validation), mark parking record as PAID
+    if (payment.status === PaymentStatus.RECEIVED) {
+      await this.prisma.parkingRecord.updateMany({
+        where: {
+          id: payment.parkingRecordId,
+          status: ParkingRecordStatus.UNPAID,
+        },
+        data: { status: ParkingRecordStatus.PAID },
+      });
+    }
 
     // Fire notification (non-blocking, non-throwing)
     if (payment.parkingRecord?.companyId) {
@@ -180,13 +193,14 @@ export class PaymentsService {
   async updatePaymentStatus(id: string, dto: UpdatePaymentStatusDto) {
     const payment = await this.prisma.payment.findUnique({
       where: { id },
+      include: { parkingRecord: true },
     });
 
     if (!payment) {
       throw new NotFoundException("Payment not found");
     }
 
-    return this.prisma.payment.update({
+    const updatedPayment = await this.prisma.payment.update({
       where: { id },
       data: { status: dto.status },
       include: {
@@ -194,6 +208,40 @@ export class PaymentsService {
         paymentMethod: true,
       },
     });
+
+    // Sync parking record status based on payment status change
+    if (payment.parkingRecord && payment.parkingRecord.status !== ParkingRecordStatus.FREE) {
+      if (dto.status === PaymentStatus.RECEIVED) {
+        // Payment confirmed → mark parking record as PAID
+        await this.prisma.parkingRecord.updateMany({
+          where: {
+            id: payment.parkingRecordId,
+            status: ParkingRecordStatus.UNPAID,
+          },
+          data: { status: ParkingRecordStatus.PAID },
+        });
+      } else if (dto.status === PaymentStatus.CANCELLED) {
+        // Payment cancelled → revert to UNPAID only if no other RECEIVED payments exist
+        const otherReceivedPayments = await this.prisma.payment.count({
+          where: {
+            parkingRecordId: payment.parkingRecordId,
+            id: { not: id },
+            status: PaymentStatus.RECEIVED,
+          },
+        });
+        if (otherReceivedPayments === 0) {
+          await this.prisma.parkingRecord.updateMany({
+            where: {
+              id: payment.parkingRecordId,
+              status: ParkingRecordStatus.PAID,
+            },
+            data: { status: ParkingRecordStatus.UNPAID },
+          });
+        }
+      }
+    }
+
+    return updatedPayment;
   }
 
   async createPaymentMethod(dto: CreatePaymentMethodDto) {

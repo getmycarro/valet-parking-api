@@ -7,8 +7,9 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { RegisterVehicleDto } from "./dto/register-vehicle.dto";
 import { CheckoutVehicleDto } from "./dto/checkout-vehicle.dto";
-import { Prisma, UserRole } from "@prisma/client";
+import { Prisma, ParkingRecordStatus, PaymentStatus, UserRole } from "@prisma/client";
 import { FilterVehiclesDto } from "./dto/filter-vehicles.dto";
+import { UpdateParkingRecordStatusDto } from "./dto/update-parking-record-status.dto";
 import * as bcrypt from "bcrypt";
 
 @Injectable()
@@ -20,7 +21,7 @@ export class VehiclesService {
     const existingRecord = await this.prisma.parkingRecord.findFirst({
       where: {
         plate: dto.plate,
-        checkOutAt: null,
+        status: { not: ParkingRecordStatus.FREE },
       },
     });
 
@@ -143,28 +144,26 @@ export class VehiclesService {
   async checkoutVehicle(id: string, dto: CheckoutVehicleDto) {
     const parkingRecord = await this.prisma.parkingRecord.findUnique({
       where: { id },
-      include: { payments: true },
     });
 
     if (!parkingRecord) {
       throw new NotFoundException("Parking record not found");
     }
 
-    if (parkingRecord.checkOutAt) {
+    if (parkingRecord.status === ParkingRecordStatus.FREE) {
       throw new ConflictException("Vehicle already checked out");
     }
 
-    // Validar que tenga al menos un pago asociado antes de entregar
-    const hasPayment = parkingRecord.payments.length > 0;
-    if (!hasPayment) {
+    if (parkingRecord.status === ParkingRecordStatus.UNPAID) {
       throw new BadRequestException(
-        "Vehicle must have an associated payment before checkout",
+        "Vehicle must be paid before checkout",
       );
     }
 
     const updatedRecord = await this.prisma.parkingRecord.update({
       where: { id },
       data: {
+        status: ParkingRecordStatus.FREE,
         checkOutAt: dto.checkOutAt || new Date(),
         checkOutValetId: dto.checkOutValet || undefined,
         notes: dto.notes || undefined,
@@ -198,7 +197,7 @@ export class VehiclesService {
           checkInValet: {
             idNumber: query.idNumber,
           },
-          checkOutAt: null, // Solo activos
+          status: { not: ParkingRecordStatus.FREE },
         },
         include: {
           checkInValet: {
@@ -274,14 +273,11 @@ export class VehiclesService {
       where.companyId = { in: companyIds };
     }
     if (options.status === "active") {
-      where.checkOutAt = null;
-      where.payments = { none: {} };
-    } else if (options.status === "completed") {
-      where.checkOutAt = { not: null };
+      where.status = ParkingRecordStatus.UNPAID;
     } else if (options.status === "pending_delivery") {
-      where.checkOutAt = null;
-      where.checkOutValetId = null;
-      where.payments = { some: {} };
+      where.status = ParkingRecordStatus.PAID;
+    } else if (options.status === "completed") {
+      where.status = ParkingRecordStatus.FREE;
     }
 
     // Field filters (case-insensitive partial match)
@@ -357,26 +353,13 @@ export class VehiclesService {
           },
         }),
         this.prisma.parkingRecord.count({
-          where: {
-            ...where,
-            checkOutAt: null,
-            payments: { none: {} },
-          },
+          where: { ...where, status: ParkingRecordStatus.UNPAID },
         }),
         this.prisma.parkingRecord.count({
-          where: {
-            ...where,
-            checkOutAt: null,
-            payments: { some: {} },
-          },
+          where: { ...where, status: ParkingRecordStatus.PAID },
         }),
         this.prisma.parkingRecord.count({
-          where: {
-            ...where,
-            checkOutValetId: undefined,
-            payments: undefined,
-            checkOutAt: { not: null },
-          },
+          where: { ...where, status: ParkingRecordStatus.FREE },
         }),
         this.prisma.parkingRecord.count({ where }),
       ]);
@@ -397,7 +380,7 @@ export class VehiclesService {
 
   async getMyActiveParkingRecords(userId: string) {
     return this.prisma.parkingRecord.findMany({
-      where: { ownerId: userId, checkOutAt: null },
+      where: { ownerId: userId, status: { not: ParkingRecordStatus.FREE } },
       include: {
         payments: true,
         checkInValet: { select: { id: true, name: true, idNumber: true } },
@@ -407,9 +390,63 @@ export class VehiclesService {
     });
   }
 
+  async updateParkingRecordStatus(id: string, dto: UpdateParkingRecordStatusDto) {
+    const parkingRecord = await this.prisma.parkingRecord.findUnique({
+      where: { id },
+      include: { payments: true },
+    });
+
+    if (!parkingRecord) {
+      throw new NotFoundException("Parking record not found");
+    }
+
+    if (parkingRecord.status === ParkingRecordStatus.FREE) {
+      throw new ConflictException("Vehicle has already checked out");
+    }
+
+    if (
+      dto.status === ParkingRecordStatus.PAID &&
+      parkingRecord.status === ParkingRecordStatus.UNPAID
+    ) {
+      const hasReceivedPayment = parkingRecord.payments.some(
+        (p) => p.status === PaymentStatus.RECEIVED,
+      );
+      if (!hasReceivedPayment) {
+        throw new BadRequestException(
+          "Cannot mark as PAID: no confirmed payment found",
+        );
+      }
+    }
+
+    const updateData: Prisma.ParkingRecordUpdateInput = {
+      status: dto.status,
+    };
+
+    if (dto.status === ParkingRecordStatus.FREE) {
+      updateData.checkOutAt = parkingRecord.checkOutAt ?? new Date();
+      if (dto.checkOutValetId) {
+        updateData.checkOutValet = { connect: { id: dto.checkOutValetId } };
+      }
+    }
+
+    if (dto.notes) {
+      updateData.notes = dto.notes;
+    }
+
+    return this.prisma.parkingRecord.update({
+      where: { id },
+      data: updateData,
+      include: {
+        payments: true,
+        checkInValet: { select: { id: true, name: true, idNumber: true } },
+        checkOutValet: { select: { id: true, name: true, idNumber: true } },
+      },
+    });
+  }
+
   async getParkingHistory(userId: string) {
     const records = await this.prisma.parkingRecord.findMany({
-      where: { ownerId: userId, checkOutAt: { not: null } },
+      where: { ownerId: userId, status: ParkingRecordStatus.FREE },
       include: {
         payments: { select: { amountUSD: true, tip: true } },
         company: { select: { id: true, name: true, photoUrl: true } },

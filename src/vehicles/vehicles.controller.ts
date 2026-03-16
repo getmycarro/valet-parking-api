@@ -11,6 +11,7 @@ import {
 import { VehiclesService } from "./vehicles.service";
 import { RegisterVehicleDto } from "./dto/register-vehicle.dto";
 import { CheckoutVehicleDto } from "./dto/checkout-vehicle.dto";
+import { UpdateParkingRecordStatusDto } from "./dto/update-parking-record-status.dto";
 import { FilterVehiclesDto } from "./dto/filter-vehicles.dto";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
@@ -54,6 +55,15 @@ export class VehiclesController {
   @Roles(UserRole.ADMIN, UserRole.ATTENDANT)
   checkoutVehicle(@Param("id") id: string, @Body() dto: CheckoutVehicleDto) {
     return this.vehiclesService.checkoutVehicle(id, dto);
+  }
+
+  @Patch(":id/status")
+  @Roles(UserRole.ADMIN, UserRole.ATTENDANT, UserRole.MANAGER)
+  updateParkingRecordStatus(
+    @Param("id") id: string,
+    @Body() dto: UpdateParkingRecordStatusDto,
+  ) {
+    return this.vehiclesService.updateParkingRecordStatus(id, dto);
   }
 
   @Get("user-vehicles")
