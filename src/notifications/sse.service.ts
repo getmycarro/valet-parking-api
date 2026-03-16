@@ -5,7 +5,11 @@ import { MessageEvent } from '@nestjs/common';
 
 @Injectable()
 export class SseService {
+  // Canal por compañía (staff)
   private readonly subjects = new Map<string, Subject<MessageEvent>>();
+
+  // Canal por usuario (clientes)
+  private readonly userSubjects = new Map<string, Subject<MessageEvent>>();
 
   private getOrCreate(companyId: string): Subject<MessageEvent> {
     if (!this.subjects.has(companyId)) {
@@ -14,9 +18,21 @@ export class SseService {
     return this.subjects.get(companyId)!;
   }
 
+  private getOrCreateUser(userId: string): Subject<MessageEvent> {
+    if (!this.userSubjects.has(userId)) {
+      this.userSubjects.set(userId, new Subject<MessageEvent>());
+    }
+    return this.userSubjects.get(userId)!;
+  }
+
   emit(companyId: string, data: Record<string, any>): void {
     if (!companyId) return;
     this.subjects.get(companyId)?.next({ data });
+  }
+
+  emitToUser(userId: string, data: Record<string, any>): void {
+    if (!userId) return;
+    this.userSubjects.get(userId)?.next({ data });
   }
 
   getStream(companyIds: string[]): Observable<MessageEvent> {
@@ -28,6 +44,14 @@ export class SseService {
       ...valid.map((id) => this.getOrCreate(id).asObservable()),
     );
     // Heartbeat every 25s to keep the connection alive (browsers & Expo close idle SSE)
+    const heartbeat$ = interval(25000).pipe(
+      map(() => ({ data: { type: 'heartbeat' } } as MessageEvent)),
+    );
+    return merge(notifications$, heartbeat$);
+  }
+
+  getStreamForUser(userId: string): Observable<MessageEvent> {
+    const notifications$ = this.getOrCreateUser(userId).asObservable();
     const heartbeat$ = interval(25000).pipe(
       map(() => ({ data: { type: 'heartbeat' } } as MessageEvent)),
     );

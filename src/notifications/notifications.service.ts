@@ -10,6 +10,7 @@ import { SseService } from './sse.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { CheckoutRequestDto } from './dto/checkout-request.dto';
 import { ObjectSearchRequestDto } from './dto/object-search-request.dto';
+import { ObjectSearchInProgressDto } from './dto/object-search-in-progress.dto';
 import { FilterNotificationsDto } from './dto/filter-notifications.dto';
 
 @Injectable()
@@ -32,11 +33,17 @@ export class NotificationsService {
           data: dto.data,
           companyId: dto.companyId,
           triggeredById: dto.triggeredById,
+          recipientId: dto.recipientId,
         },
       });
 
-      // Push via SSE (primary real-time channel)
+      // Push via SSE al canal de la compañía (staff)
       this.sse.emit(dto.companyId, { type: 'notification', payload: notification });
+
+      // Si hay destinatario específico, emitir también a su canal personal
+      if (dto.recipientId) {
+        this.sse.emitToUser(dto.recipientId, { type: 'notification', payload: notification });
+      }
 
       // Supabase broadcast kept as secondary channel (no-op if not configured)
       await this.supabase.broadcast(`company-${dto.companyId}`, 'notification', notification);
@@ -169,6 +176,35 @@ export class NotificationsService {
       },
       companyId,
       triggeredById: userId,
+    });
+  }
+
+  async notifySearchInProgress(dto: ObjectSearchInProgressDto, staffUserId: string) {
+    const parkingRecord = await this.prisma.parkingRecord.findUnique({
+      where: { id: dto.parkingRecordId },
+      select: { plate: true, brand: true, model: true, color: true, companyId: true, ownerId: true },
+    });
+
+    if (!parkingRecord) {
+      this.logger.warn(`notifySearchInProgress: parkingRecord ${dto.parkingRecordId} not found`);
+      return null;
+    }
+
+    if (!parkingRecord.ownerId) {
+      this.logger.warn(`notifySearchInProgress: parkingRecord ${dto.parkingRecordId} has no ownerId`);
+      return null;
+    }
+
+    const { companyId, ownerId, ...vehicleInfo } = parkingRecord;
+
+    return this.create({
+      type: 'OBJECT_SEARCH_IN_PROGRESS',
+      title: 'Búsqueda en proceso',
+      message: `La búsqueda en tu vehículo placa ${vehicleInfo.plate} está en proceso${dto.notes ? `: ${dto.notes}` : ''}`,
+      data: { parkingRecordId: dto.parkingRecordId, notes: dto.notes, ...vehicleInfo },
+      companyId,
+      triggeredById: staffUserId,
+      recipientId: ownerId,
     });
   }
 }

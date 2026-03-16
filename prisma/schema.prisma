@@ -52,6 +52,7 @@ enum NotificationType {
   PAYMENT_EXPIRED
   CHECKOUT_REQUEST
   OBJECT_SEARCH_REQUEST
+  OBJECT_SEARCH_IN_PROGRESS
 }
 
 enum RequestStatus {
@@ -120,8 +121,9 @@ model User {
   payments               Payment[]        @relation("ProcessedBy")
   registerRecords        ParkingRecord[]  @relation("RegisterRecord")
   companyUsers           CompanyUser[]
-  triggeredNotifications Notification[]   @relation("TriggeredNotifications")
-  vehicleRequests        VehicleRequest[] @relation("VehicleRequestedBy")
+  triggeredNotifications  Notification[]   @relation("TriggeredNotifications")
+  receivedNotifications   Notification[]   @relation("ReceivedNotifications")
+  vehicleRequests         VehicleRequest[] @relation("VehicleRequestedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -346,11 +348,14 @@ model Notification {
   company       Company          @relation(fields: [companyId], references: [id])
   triggeredById String?
   triggeredBy   User?            @relation("TriggeredNotifications", fields: [triggeredById], references: [id])
+  recipientId   String?
+  recipient     User?            @relation("ReceivedNotifications", fields: [recipientId], references: [id])
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
   @@index([companyId])
   @@index([companyId, isRead])
   @@index([companyId, type])
+  @@index([recipientId])
   @@map("notifications")
 }

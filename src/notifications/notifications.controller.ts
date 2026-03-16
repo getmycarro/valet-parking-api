@@ -15,6 +15,7 @@ import { NotificationsService } from './notifications.service';
 import { SseService } from './sse.service';
 import { CheckoutRequestDto } from './dto/checkout-request.dto';
 import { ObjectSearchRequestDto } from './dto/object-search-request.dto';
+import { ObjectSearchInProgressDto } from './dto/object-search-in-progress.dto';
 import { FilterNotificationsDto } from './dto/filter-notifications.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -30,7 +31,7 @@ export class NotificationsController {
   ) {}
 
   /**
-   * SSE stream — connect with:
+   * SSE stream para staff — connect with:
    *   Next.js  : new EventSource(`/api/notifications/stream?token=${jwt}`)
    *   Expo RN  : new EventSource(`/api/notifications/stream?token=${jwt}`)
    *              (requires react-native-sse: yarn add react-native-sse)
@@ -42,6 +43,16 @@ export class NotificationsController {
       (cu: any) => cu.company?.id,
     );
     return this.sseService.getStream(companyIds);
+  }
+
+  /**
+   * SSE stream para clientes — reciben notificaciones dirigidas a su userId.
+   *   Expo RN: new EventSource(`/api/notifications/client-stream?token=${jwt}`)
+   */
+  @Sse('client-stream')
+  @Roles(UserRole.CLIENT)
+  clientStream(@CurrentUser() user: any): Observable<MessageEvent> {
+    return this.sseService.getStreamForUser(user.id);
   }
 
   @Get()
@@ -85,5 +96,14 @@ export class NotificationsController {
   ) {
     // companyId is derived from the parkingRecord, not the user token
     return this.notificationsService.createObjectSearchRequest(dto, user.id);
+  }
+
+  @Post('object-search-in-progress')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
+  notifySearchInProgress(
+    @Body() dto: ObjectSearchInProgressDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.notificationsService.notifySearchInProgress(dto, user.id);
   }
 }

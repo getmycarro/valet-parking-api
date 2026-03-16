@@ -21,4 +21,8 @@ export class CreateNotificationDto {
   @IsOptional()
   @IsString()
   triggeredById?: string;
+
+  @IsOptional()
+  @IsString()
+  recipientId?: string;
 }
