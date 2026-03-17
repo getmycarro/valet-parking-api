@@ -138,7 +138,23 @@ export class VehiclesService {
       where: { idNumber: idNumber },
       include: { ownedVehicles: true },
     });
-    return user;
+
+    if (!user) return null;
+
+    const activeRecords = await this.prisma.parkingRecord.findMany({
+      where: {
+        ownerId: user.id,
+        status: { not: ParkingRecordStatus.FREE },
+      },
+      select: { plate: true },
+    });
+
+    const activePlates = new Set(activeRecords.map((r) => r.plate));
+
+    return {
+      ...user,
+      ownedVehicles: user.ownedVehicles.filter((v) => !activePlates.has(v.plate)),
+    };
   }
 
   async checkoutVehicle(id: string, dto: CheckoutVehicleDto) {
@@ -442,6 +458,24 @@ export class VehiclesService {
         checkOutValet: { select: { id: true, name: true, idNumber: true } },
       },
     });
+  }
+
+  async getVehiclesByOwnerId(ownerId: string) {
+    const vehicles = await this.prisma.vehicle.findMany({
+      where: { ownerId, deletedAt: null },
+    });
+
+    const activePlates = await this.prisma.parkingRecord.findMany({
+      where: {
+        plate: { in: vehicles.map((v) => v.plate) },
+        status: { not: ParkingRecordStatus.FREE },
+      },
+      select: { plate: true },
+    });
+
+    const activePlateSet = new Set(activePlates.map((r) => r.plate));
+
+    return vehicles.filter((v) => !activePlateSet.has(v.plate));
   }
 
   async getParkingHistory(userId: string) {

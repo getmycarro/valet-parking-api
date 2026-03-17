@@ -11,6 +11,7 @@ import { CreateNotificationDto } from './dto/create-notification.dto';
 import { CheckoutRequestDto } from './dto/checkout-request.dto';
 import { ObjectSearchRequestDto } from './dto/object-search-request.dto';
 import { ObjectSearchInProgressDto } from './dto/object-search-in-progress.dto';
+import { ApproachCounterDto } from './dto/approach-counter.dto';
 import { FilterNotificationsDto } from './dto/filter-notifications.dto';
 
 @Injectable()
@@ -176,6 +177,35 @@ export class NotificationsService {
       },
       companyId,
       triggeredById: userId,
+    });
+  }
+
+  async notifyApproachCounter(dto: ApproachCounterDto, staffUserId: string) {
+    const parkingRecord = await this.prisma.parkingRecord.findUnique({
+      where: { id: dto.parkingRecordId },
+      select: { plate: true, brand: true, model: true, color: true, companyId: true, ownerId: true },
+    });
+
+    if (!parkingRecord) {
+      this.logger.warn(`notifyApproachCounter: parkingRecord ${dto.parkingRecordId} not found`);
+      return null;
+    }
+
+    if (!parkingRecord.ownerId) {
+      this.logger.warn(`notifyApproachCounter: parkingRecord ${dto.parkingRecordId} has no ownerId`);
+      return null;
+    }
+
+    const { companyId, ownerId, ...vehicleInfo } = parkingRecord;
+
+    return this.create({
+      type: 'APPROACH_COUNTER',
+      title: 'Por favor acércate al mostrador',
+      message: `Te solicitamos que te acerques al mostrador para tu vehículo con placa ${vehicleInfo.plate}${dto.notes ? `: ${dto.notes}` : ''}`,
+      data: { parkingRecordId: dto.parkingRecordId, notes: dto.notes, ...vehicleInfo },
+      companyId,
+      triggeredById: staffUserId,
+      recipientId: ownerId,
     });
   }
 

@@ -60,6 +60,7 @@ enum NotificationType {
   CHECKOUT_REQUEST
   OBJECT_SEARCH_REQUEST
   OBJECT_SEARCH_IN_PROGRESS
+  APPROACH_COUNTER
 }
 
 enum RequestStatus {

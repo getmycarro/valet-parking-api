@@ -5,7 +5,7 @@ import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { CreatePaymentMethodDto } from "./dto/create-payment-method.dto";
 import { UpdatePaymentStatusDto } from "./dto/update-payment-status.dto";
 import { FilterPaymentDto } from "./dto/filter-payment.dto";
-import { PaymentStatus, ParkingRecordStatus, Prisma, PlanType, FeeType } from "@prisma/client";
+import { PaymentStatus, ParkingRecordStatus, Prisma, PlanType, FeeType, PaymentMethodType } from "@prisma/client";
 
 @Injectable()
 export class PaymentsService {
@@ -15,6 +15,19 @@ export class PaymentsService {
   ) {}
 
   async createPayment(dto: CreatePaymentDto, userId: string) {
+    // Punto de venta (CARD) siempre inicia en PENDING
+    let initialStatus: PaymentStatus = dto.validation === "AUTOMATIC" ? PaymentStatus.RECEIVED : PaymentStatus.PENDING;
+
+    if (dto.paymentMethodId) {
+      const method = await this.prisma.paymentMethod.findUnique({
+        where: { id: dto.paymentMethodId },
+        select: { type: true },
+      });
+      if (method?.type === PaymentMethodType.CARD) {
+        initialStatus = PaymentStatus.PENDING;
+      }
+    }
+
     const payment = await this.prisma.payment.create({
       data: {
         parkingRecordId: dto.parkingRecordId,
@@ -24,8 +37,9 @@ export class PaymentsService {
         fee: dto.fee,
         validation: dto.validation,
         // AUTOMATIC = gateway confirma solo → RECEIVED inmediato
-      // MANUAL    = humano aprueba desde el dashboard → PENDING hasta confirmación
-      status: dto.validation === "AUTOMATIC" ? "RECEIVED" : "PENDING",
+        // MANUAL    = humano aprueba desde el dashboard → PENDING hasta confirmación
+        // CARD (punto de venta) = siempre PENDING hasta confirmación manual
+        status: initialStatus,
         reference: dto.reference,
         note: dto.note,
         image: dto.image,

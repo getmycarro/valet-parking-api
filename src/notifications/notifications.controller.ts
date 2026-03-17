@@ -16,6 +16,7 @@ import { SseService } from './sse.service';
 import { CheckoutRequestDto } from './dto/checkout-request.dto';
 import { ObjectSearchRequestDto } from './dto/object-search-request.dto';
 import { ObjectSearchInProgressDto } from './dto/object-search-in-progress.dto';
+import { ApproachCounterDto } from './dto/approach-counter.dto';
 import { FilterNotificationsDto } from './dto/filter-notifications.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -96,6 +97,15 @@ export class NotificationsController {
   ) {
     // companyId is derived from the parkingRecord, not the user token
     return this.notificationsService.createObjectSearchRequest(dto, user.id);
+  }
+
+  @Post('approach-counter')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
+  notifyApproachCounter(
+    @Body() dto: ApproachCounterDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.notificationsService.notifyApproachCounter(dto, user.id);
   }
 
   @Post('object-search-in-progress')

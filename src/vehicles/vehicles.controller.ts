@@ -78,6 +78,12 @@ export class VehiclesController {
     return this.vehiclesService.getValets();
   }
 
+  @Get("owner/:ownerId")
+  @Roles(UserRole.CLIENT)
+  getVehiclesByOwnerId(@Param("ownerId") ownerId: string) {
+    return this.vehiclesService.getVehiclesByOwnerId(ownerId);
+  }
+
   @Get("my-car")
   @Roles(UserRole.CLIENT)
   getMyActiveParkingRecords(@CurrentUser() user: any) {
