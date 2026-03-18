@@ -4,9 +4,9 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { SupabaseService } from '../supabase/supabase.service';
-import { SseService } from './sse.service';
+import { OneSignalService } from './onesignal.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { CheckoutRequestDto } from './dto/checkout-request.dto';
 import { ObjectSearchRequestDto } from './dto/object-search-request.dto';
@@ -20,8 +20,7 @@ export class NotificationsService {
 
   constructor(
     private prisma: PrismaService,
-    private supabase: SupabaseService,
-    private sse: SseService,
+    private onesignal: OneSignalService,
   ) {}
 
   async create(dto: CreateNotificationDto) {
@@ -38,16 +37,20 @@ export class NotificationsService {
         },
       });
 
-      // Push via SSE al canal de la compañía (staff)
-      this.sse.emit(dto.companyId, { type: 'notification', payload: notification });
-
-      // Si hay destinatario específico, emitir también a su canal personal
+      // Push via OneSignal
       if (dto.recipientId) {
-        this.sse.emitToUser(dto.recipientId, { type: 'notification', payload: notification });
+        void this.onesignal.sendToUser(dto.recipientId, dto.title, dto.message, {
+          type: notification.type,
+          notificationId: notification.id,
+          ...((dto.data as Record<string, any>) ?? {}),
+        });
+      } else {
+        void this.onesignal.sendToCompany(dto.companyId, dto.title, dto.message, {
+          type: notification.type,
+          notificationId: notification.id,
+          ...((dto.data as Record<string, any>) ?? {}),
+        });
       }
-
-      // Supabase broadcast kept as secondary channel (no-op if not configured)
-      await this.supabase.broadcast(`company-${dto.companyId}`, 'notification', notification);
 
       return notification;
     } catch (error) {
@@ -59,18 +62,37 @@ export class NotificationsService {
     }
   }
 
-  async findAll(companyId: string, filters: FilterNotificationsDto) {
+  async findAll(
+    companyId: string,
+    filters: FilterNotificationsDto,
+    userId: string,
+    userRole: UserRole,
+  ) {
     const page = filters.page || 1;
     const limit = filters.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where: any = { companyId };
-
-    if (filters.type !== undefined) {
-      where.type = filters.type;
+    // Visibilidad base según rol
+    const visibilityWhere: any = { companyId };
+    if (userRole === UserRole.CLIENT) {
+      // El cliente solo ve sus propias notificaciones
+      visibilityWhere.recipientId = userId;
+    } else if (userRole === UserRole.ATTENDANT) {
+      // El attendant ve las de la empresa (sin destinatario) + las suyas propias
+      visibilityWhere.OR = [{ recipientId: null }, { recipientId: userId }];
     }
-    if (filters.isRead !== undefined) {
-      where.isRead = filters.isRead;
+    // ADMIN/MANAGER ven todas las notificaciones de la empresa
+
+    // Filtros adicionales sobre la visibilidad base
+    const where: any = { ...visibilityWhere };
+    if (filters.type !== undefined) where.type = filters.type;
+    if (filters.isRead !== undefined) where.isRead = filters.isRead;
+    // ADMIN/MANAGER pueden filtrar por destinatario específico
+    if (
+      filters.recipientId !== undefined &&
+      (userRole === UserRole.ADMIN || userRole === UserRole.MANAGER)
+    ) {
+      where.recipientId = filters.recipientId;
     }
 
     const [notifications, total, unreadCount] = await Promise.all([
@@ -83,10 +105,13 @@ export class NotificationsService {
           triggeredBy: {
             select: { id: true, name: true, email: true },
           },
+          recipient: {
+            select: { id: true, name: true, email: true },
+          },
         },
       }),
       this.prisma.notification.count({ where }),
-      this.prisma.notification.count({ where: { companyId, isRead: false } }),
+      this.prisma.notification.count({ where: { ...visibilityWhere, isRead: false } }),
     ]);
 
     return {
@@ -101,7 +126,20 @@ export class NotificationsService {
     };
   }
 
-  async markAsRead(id: string, companyId: string) {
+  async getUnreadCount(companyId: string, userId: string, userRole: UserRole) {
+    const where: any = { companyId, isRead: false };
+
+    if (userRole === UserRole.CLIENT) {
+      where.recipientId = userId;
+    } else if (userRole === UserRole.ATTENDANT) {
+      where.OR = [{ recipientId: null }, { recipientId: userId }];
+    }
+
+    const count = await this.prisma.notification.count({ where });
+    return { unreadCount: count };
+  }
+
+  async markAsRead(id: string, companyId: string, userId: string, userRole: UserRole) {
     const notification = await this.prisma.notification.findUnique({
       where: { id },
     });
@@ -114,15 +152,28 @@ export class NotificationsService {
       throw new ForbiddenException('Access denied');
     }
 
+    // CLIENT solo puede marcar sus propias notificaciones
+    if (userRole === UserRole.CLIENT && notification.recipientId !== userId) {
+      throw new ForbiddenException('Access denied');
+    }
+
     return this.prisma.notification.update({
       where: { id },
       data: { isRead: true },
     });
   }
 
-  async markAllAsRead(companyId: string) {
+  async markAllAsRead(companyId: string, userId: string, userRole: UserRole) {
+    const where: any = { companyId, isRead: false };
+
+    if (userRole === UserRole.CLIENT) {
+      where.recipientId = userId;
+    } else if (userRole === UserRole.ATTENDANT) {
+      where.OR = [{ recipientId: null }, { recipientId: userId }];
+    }
+
     const result = await this.prisma.notification.updateMany({
-      where: { companyId, isRead: false },
+      where,
       data: { isRead: true },
     });
 

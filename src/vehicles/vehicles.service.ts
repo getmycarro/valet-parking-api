@@ -399,6 +399,7 @@ export class VehiclesService {
       where: { ownerId: userId, status: { not: ParkingRecordStatus.FREE } },
       include: {
         payments: true,
+        registerRecord: { select: { id: true, name: true, idNumber: true } },
         checkInValet: { select: { id: true, name: true, idNumber: true } },
         checkOutValet: { select: { id: true, name: true, idNumber: true } },
       },

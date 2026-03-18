@@ -7,12 +7,8 @@ import {
   Body,
   Query,
   UseGuards,
-  Sse,
-  MessageEvent,
 } from '@nestjs/common';
-import { Observable } from 'rxjs';
 import { NotificationsService } from './notifications.service';
-import { SseService } from './sse.service';
 import { CheckoutRequestDto } from './dto/checkout-request.dto';
 import { ObjectSearchRequestDto } from './dto/object-search-request.dto';
 import { ObjectSearchInProgressDto } from './dto/object-search-in-progress.dto';
@@ -26,56 +22,35 @@ import { UserRole } from '@prisma/client';
 @Controller('notifications')
 @UseGuards(RolesGuard)
 export class NotificationsController {
-  constructor(
-    private notificationsService: NotificationsService,
-    private sseService: SseService,
-  ) {}
-
-  /**
-   * SSE stream para staff — connect with:
-   *   Next.js  : new EventSource(`/api/notifications/stream?token=${jwt}`)
-   *   Expo RN  : new EventSource(`/api/notifications/stream?token=${jwt}`)
-   *              (requires react-native-sse: yarn add react-native-sse)
-   */
-  @Sse('stream')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
-  stream(@CurrentUser() user: any): Observable<MessageEvent> {
-    const companyIds: string[] = (user.companyUsers ?? []).map(
-      (cu: any) => cu.company?.id,
-    );
-    return this.sseService.getStream(companyIds);
-  }
-
-  /**
-   * SSE stream para clientes — reciben notificaciones dirigidas a su userId.
-   *   Expo RN: new EventSource(`/api/notifications/client-stream?token=${jwt}`)
-   */
-  @Sse('client-stream')
-  @Roles(UserRole.CLIENT)
-  clientStream(@CurrentUser() user: any): Observable<MessageEvent> {
-    return this.sseService.getStreamForUser(user.id);
-  }
+  constructor(private notificationsService: NotificationsService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT, UserRole.CLIENT)
   findAll(@Query() filters: FilterNotificationsDto, @CurrentUser() user: any) {
     const companyId = user.companyUsers?.[0]?.company?.id;
-    return this.notificationsService.findAll(companyId, filters);
+    return this.notificationsService.findAll(companyId, filters, user.id, user.role);
   }
 
-  // ⚠️ Must be declared BEFORE :id/read to avoid route conflict
+  // ⚠️ Must be declared BEFORE :id routes to avoid route conflicts
+  @Get('unread-count')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT, UserRole.CLIENT)
+  getUnreadCount(@CurrentUser() user: any) {
+    const companyId = user.companyUsers?.[0]?.company?.id;
+    return this.notificationsService.getUnreadCount(companyId, user.id, user.role);
+  }
+
   @Patch('read-all')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT, UserRole.CLIENT)
   markAllAsRead(@CurrentUser() user: any) {
     const companyId = user.companyUsers?.[0]?.company?.id;
-    return this.notificationsService.markAllAsRead(companyId);
+    return this.notificationsService.markAllAsRead(companyId, user.id, user.role);
   }
 
   @Patch(':id/read')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT, UserRole.CLIENT)
   markAsRead(@Param('id') id: string, @CurrentUser() user: any) {
     const companyId = user.companyUsers?.[0]?.company?.id;
-    return this.notificationsService.markAsRead(id, companyId);
+    return this.notificationsService.markAsRead(id, companyId, user.id, user.role);
   }
 
   @Post('checkout-request')
@@ -84,8 +59,6 @@ export class NotificationsController {
     @Body() dto: CheckoutRequestDto,
     @CurrentUser() user: any,
   ) {
-    // companyId is derived from the parkingRecord, not the user token
-    // This allows CLIENT users (who have no company in their token) to trigger notifications
     return this.notificationsService.createCheckoutRequest(dto, user.id);
   }
 
@@ -95,7 +68,6 @@ export class NotificationsController {
     @Body() dto: ObjectSearchRequestDto,
     @CurrentUser() user: any,
   ) {
-    // companyId is derived from the parkingRecord, not the user token
     return this.notificationsService.createObjectSearchRequest(dto, user.id);
   }
 
