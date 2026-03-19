@@ -126,9 +126,13 @@ export class RequestsService {
     id: string,
     dto: UpdateRequestStatusDto,
     companyId: string,
+    staffUserId: string,
   ) {
     const request = await this.prisma.vehicleRequest.findUnique({
       where: { id },
+      include: {
+        parkingRecord: { select: { plate: true, ownerId: true } },
+      },
     });
 
     if (!request) {
@@ -141,12 +145,35 @@ export class RequestsService {
 
     const isResolved = ['COMPLETED', 'CANCELLED'].includes(dto.status);
 
-    return this.prisma.vehicleRequest.update({
+    const updated = await this.prisma.vehicleRequest.update({
       where: { id },
       data: {
         status: dto.status,
         resolvedAt: isResolved ? new Date() : undefined,
       },
     });
+
+    // Notify client when request is cancelled or completed
+    if (isResolved && request.requestedById && request.parkingRecord?.ownerId) {
+      const isCancelled = dto.status === 'CANCELLED';
+      const plate = request.parkingRecord.plate;
+      const notesText = dto.notes ? `: ${dto.notes}` : '';
+
+      await this.notifications.create({
+        type: 'OBJECT_SEARCH_IN_PROGRESS',
+        title: isCancelled
+          ? 'Solicitud cancelada'
+          : 'Solicitud completada',
+        message: isCancelled
+          ? `Tu solicitud de búsqueda para el vehículo placa ${plate} fue cancelada${notesText}`
+          : `Tu solicitud de búsqueda para el vehículo placa ${plate} fue completada${notesText}`,
+        data: { requestId: id, status: dto.status, notes: dto.notes },
+        companyId,
+        triggeredById: staffUserId,
+        recipientId: request.parkingRecord.ownerId,
+      });
+    }
+
+    return updated;
   }
 }

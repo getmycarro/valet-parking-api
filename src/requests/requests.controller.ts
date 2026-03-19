@@ -45,7 +45,6 @@ export class RequestsController {
     @Body() dto: UpdateRequestStatusDto,
     @CurrentUser() user: any,
   ) {
-    const companyId = user.companyUsers?.[0]?.company?.id;
-    return this.requestsService.updateStatus(id, dto, companyId);
+    return this.requestsService.updateStatus(id, dto, user.companyId, user.id);
   }
 }

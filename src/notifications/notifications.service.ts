@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -178,6 +179,106 @@ export class NotificationsService {
     });
 
     return { updated: result.count };
+  }
+
+  async markAllAsReadAcrossCompanies(
+    companyIds: string[],
+    userId: string,
+    userRole: UserRole,
+  ) {
+    if (!companyIds.length) return { updated: 0 };
+
+    const where: any = { companyId: { in: companyIds }, isRead: false };
+
+    if (userRole === UserRole.ATTENDANT) {
+      where.OR = [{ recipientId: null }, { recipientId: userId }];
+    }
+    // ADMIN/MANAGER ven todas las notificaciones de sus empresas
+
+    const result = await this.prisma.notification.updateMany({
+      where,
+      data: { isRead: true },
+    });
+
+    return { updated: result.count };
+  }
+
+  async acceptRequestNotification(
+    id: string,
+    staffUserId: string,
+    companyIds: string[],
+  ) {
+    const notification = await this.prisma.notification.findUnique({
+      where: { id },
+    });
+
+    if (!notification) {
+      throw new NotFoundException('Notification not found');
+    }
+
+    if (!companyIds.includes(notification.companyId)) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    const acceptableTypes: string[] = [
+      'OBJECT_SEARCH_REQUEST',
+      'CHECKOUT_REQUEST',
+    ];
+    if (!acceptableTypes.includes(notification.type)) {
+      throw new BadRequestException(
+        'Only OBJECT_SEARCH_REQUEST or CHECKOUT_REQUEST notifications can be accepted',
+      );
+    }
+
+    await this.prisma.notification.update({
+      where: { id },
+      data: { isRead: true },
+    });
+
+    const data = (notification.data as Record<string, any>) ?? {};
+
+    // Update VehicleRequest to IN_PROGRESS when accepting an object search
+    if (data.requestId && notification.type === 'OBJECT_SEARCH_REQUEST') {
+      await this.prisma.vehicleRequest
+        .update({
+          where: { id: data.requestId },
+          data: { status: 'IN_PROGRESS' },
+        })
+        .catch((err) =>
+          this.logger.warn(
+            `acceptRequestNotification: could not update vehicleRequest ${data.requestId}: ${err.message}`,
+          ),
+        );
+    }
+
+    // Notify client
+    if (data.parkingRecordId) {
+      const parkingRecord = await this.prisma.parkingRecord.findUnique({
+        where: { id: data.parkingRecordId },
+        select: { ownerId: true, plate: true },
+      });
+
+      if (parkingRecord?.ownerId) {
+        const isObjectSearch = notification.type === 'OBJECT_SEARCH_REQUEST';
+        await this.create({
+          type: isObjectSearch
+            ? 'OBJECT_SEARCH_IN_PROGRESS'
+            : 'APPROACH_COUNTER',
+          title: isObjectSearch
+            ? 'Búsqueda en proceso'
+            : 'Tu vehículo está siendo preparado',
+          message: isObjectSearch
+            ? `La búsqueda en tu vehículo placa ${parkingRecord.plate} ha sido aceptada y está en proceso`
+            : `Tu solicitud de entrega para el vehículo placa ${parkingRecord.plate} fue aceptada, por favor acércate`,
+          data: { ...data, acceptedById: staffUserId },
+          companyId: notification.companyId,
+          triggeredById: staffUserId,
+          recipientId: parkingRecord.ownerId,
+        });
+      }
+    }
+
+    return { success: true };
   }
 
   async getUnreadAcrossCompanies(

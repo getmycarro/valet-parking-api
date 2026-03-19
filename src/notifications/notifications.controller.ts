@@ -57,10 +57,38 @@ export class NotificationsController {
     return this.notificationsService.markAllAsRead(user.companyId, user.id, user.role);
   }
 
+  /**
+   * Marks all unread notifications as read across ALL companies the user belongs to.
+   * Only for non-CLIENT roles.
+   */
+  @Patch('read-all-companies')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
+  markAllAsReadAcrossCompanies(@CurrentUser() user: any) {
+    return this.notificationsService.markAllAsReadAcrossCompanies(
+      user.companyIds ?? [],
+      user.id,
+      user.role,
+    );
+  }
+
   @Patch(':id/read')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT, UserRole.CLIENT)
   markAsRead(@Param('id') id: string, @CurrentUser() user: any) {
     return this.notificationsService.markAsRead(id, user.companyId, user.id, user.role);
+  }
+
+  /**
+   * Accepts a request-type notification (CHECKOUT_REQUEST or OBJECT_SEARCH_REQUEST).
+   * Marks it as read, updates the VehicleRequest to IN_PROGRESS, and notifies the client.
+   */
+  @Patch(':id/accept')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
+  acceptRequest(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.notificationsService.acceptRequestNotification(
+      id,
+      user.id,
+      user.companyIds ?? [],
+    );
   }
 
   @Post('checkout-request')
