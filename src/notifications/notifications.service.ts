@@ -260,20 +260,17 @@ export class NotificationsService {
 
       if (parkingRecord?.ownerId) {
         const isObjectSearch = notification.type === 'OBJECT_SEARCH_REQUEST';
-        await this.create({
-          type: isObjectSearch
-            ? 'OBJECT_SEARCH_IN_PROGRESS'
-            : 'APPROACH_COUNTER',
-          title: isObjectSearch
-            ? 'Búsqueda en proceso'
-            : 'Tu vehículo está siendo preparado',
-          message: isObjectSearch
-            ? `La búsqueda en tu vehículo placa ${parkingRecord.plate} ha sido aceptada y está en proceso`
-            : `Tu solicitud de entrega para el vehículo placa ${parkingRecord.plate} fue aceptada, por favor acércate`,
-          data: { ...data, acceptedById: staffUserId },
-          companyId: notification.companyId,
-          triggeredById: staffUserId,
-          recipientId: parkingRecord.ownerId,
+        const title = isObjectSearch
+          ? 'Búsqueda en proceso'
+          : 'Tu vehículo está siendo preparado';
+        const message = isObjectSearch
+          ? `La búsqueda en tu vehículo placa ${parkingRecord.plate} ha sido aceptada y está en proceso`
+          : `Tu solicitud de entrega para el vehículo placa ${parkingRecord.plate} fue aceptada, por favor acércate`;
+
+        void this.onesignal.sendToUser(parkingRecord.ownerId, title, message, {
+          type: isObjectSearch ? 'OBJECT_SEARCH_IN_PROGRESS' : 'APPROACH_COUNTER',
+          ...data,
+          acceptedById: staffUserId,
         });
       }
     }
