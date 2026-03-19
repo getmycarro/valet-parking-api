@@ -27,30 +27,40 @@ export class NotificationsController {
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT, UserRole.CLIENT)
   findAll(@Query() filters: FilterNotificationsDto, @CurrentUser() user: any) {
-    const companyId = user.companyUsers?.[0]?.company?.id;
-    return this.notificationsService.findAll(companyId, filters, user.id, user.role);
+    return this.notificationsService.findAll(user.companyId, filters, user.id, user.role);
   }
 
   // ⚠️ Must be declared BEFORE :id routes to avoid route conflicts
   @Get('unread-count')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT, UserRole.CLIENT)
   getUnreadCount(@CurrentUser() user: any) {
-    const companyId = user.companyUsers?.[0]?.company?.id;
-    return this.notificationsService.getUnreadCount(companyId, user.id, user.role);
+    return this.notificationsService.getUnreadCount(user.companyId, user.id, user.role);
+  }
+
+  /**
+   * Polling endpoint: returns all unread notifications across all companies the user belongs to.
+   * Only for non-CLIENT roles. CLIENT users don't have companyUsers.
+   */
+  @Get('unread')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
+  getUnreadAcrossCompanies(@CurrentUser() user: any) {
+    return this.notificationsService.getUnreadAcrossCompanies(
+      user.companyIds ?? [],
+      user.id,
+      user.role,
+    );
   }
 
   @Patch('read-all')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT, UserRole.CLIENT)
   markAllAsRead(@CurrentUser() user: any) {
-    const companyId = user.companyUsers?.[0]?.company?.id;
-    return this.notificationsService.markAllAsRead(companyId, user.id, user.role);
+    return this.notificationsService.markAllAsRead(user.companyId, user.id, user.role);
   }
 
   @Patch(':id/read')
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT, UserRole.CLIENT)
   markAsRead(@Param('id') id: string, @CurrentUser() user: any) {
-    const companyId = user.companyUsers?.[0]?.company?.id;
-    return this.notificationsService.markAsRead(id, companyId, user.id, user.role);
+    return this.notificationsService.markAsRead(id, user.companyId, user.id, user.role);
   }
 
   @Post('checkout-request')

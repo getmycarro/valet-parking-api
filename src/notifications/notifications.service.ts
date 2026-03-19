@@ -180,6 +180,36 @@ export class NotificationsService {
     return { updated: result.count };
   }
 
+  async getUnreadAcrossCompanies(
+    companyIds: string[],
+    userId: string,
+    userRole: UserRole,
+  ) {
+    if (!companyIds.length) return { data: [], total: 0 };
+
+    const where: any = {
+      companyId: { in: companyIds },
+      isRead: false,
+    };
+
+    if (userRole === UserRole.ATTENDANT) {
+      where.OR = [{ recipientId: null }, { recipientId: userId }];
+    }
+    // ADMIN/MANAGER ven todas las notificaciones sin leer de sus empresas
+
+    const notifications = await this.prisma.notification.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        triggeredBy: { select: { id: true, name: true, email: true } },
+        recipient: { select: { id: true, name: true, email: true } },
+        company: { select: { id: true, name: true } },
+      },
+    });
+
+    return { data: notifications, total: notifications.length };
+  }
+
   async createCheckoutRequest(dto: CheckoutRequestDto, userId: string) {
     const parkingRecord = await this.prisma.parkingRecord.findUnique({
       where: { id: dto.parkingRecordId },

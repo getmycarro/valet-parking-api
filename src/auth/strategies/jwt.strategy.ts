@@ -48,6 +48,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
-    return user; // Se adjunta a req.user
+    // Resolve companyId: staff users use companyUsers, CLIENT users use their latest ParkingRecord
+    // CLIENT users are not in company_users — their company is determined by their parking records
+    let companyId: string | undefined = user.companyUsers?.[0]?.company?.id;
+    if (!companyId) {
+      const latestRecord = await this.prisma.parkingRecord.findFirst({
+        where: { ownerId: user.id },
+        orderBy: { createdAt: 'desc' },
+        select: { companyId: true },
+      });
+      companyId = latestRecord?.companyId ?? undefined;
+    }
+
+    const companyIds = user.companyUsers?.map((cu) => cu.company.id) ?? [];
+
+    return { ...user, companyId, companyIds }; // companyId = primary, companyIds = all companies for staff
   }
 }
