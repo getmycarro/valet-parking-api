@@ -25,6 +25,7 @@ export class NotificationsService {
   ) {}
 
   async create(dto: CreateNotificationDto) {
+    this.logger.log(`create: type=${dto.type} companyId=${dto.companyId} triggeredById=${dto.triggeredById} recipientId=${dto.recipientId}`);
     try {
       const notification = await this.prisma.notification.create({
         data: {
@@ -56,7 +57,7 @@ export class NotificationsService {
       return notification;
     } catch (error) {
       this.logger.error(
-        `Failed to create notification: ${error.message}`,
+        `create notification FAILED: type=${dto.type} companyId=${dto.companyId} triggeredById=${dto.triggeredById} recipientId=${dto.recipientId} — ${error.message}`,
         error.stack,
       );
       return null;
@@ -360,10 +361,14 @@ export class NotificationsService {
   }
 
   async notifyApproachCounter(dto: ApproachCounterDto, staffUserId: string) {
+    this.logger.log(`notifyApproachCounter: start — parkingRecordId=${dto.parkingRecordId} staffUserId=${staffUserId} notes=${dto.notes}`);
+
     const parkingRecord = await this.prisma.parkingRecord.findUnique({
       where: { id: dto.parkingRecordId },
       select: { plate: true, brand: true, model: true, color: true, companyId: true, ownerId: true },
     });
+
+    this.logger.log(`notifyApproachCounter: parkingRecord result=${JSON.stringify(parkingRecord)}`);
 
     if (!parkingRecord) {
       this.logger.warn(`notifyApproachCounter: parkingRecord ${dto.parkingRecordId} not found`);
@@ -376,6 +381,8 @@ export class NotificationsService {
     }
 
     const { companyId, ownerId, ...vehicleInfo } = parkingRecord;
+
+    this.logger.log(`notifyApproachCounter: creating notification — companyId=${companyId} ownerId=${ownerId} vehicleInfo=${JSON.stringify(vehicleInfo)}`);
 
     return this.create({
       type: 'APPROACH_COUNTER',

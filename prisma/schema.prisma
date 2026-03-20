@@ -51,6 +51,7 @@ enum ParkingRecordStatus {
   UNPAID
   PAID
   FREE
+  PAYMENT_UNDER_REVIEW
 }
 
 enum NotificationType {
