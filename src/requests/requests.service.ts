@@ -171,6 +171,7 @@ export class RequestsService {
         companyId,
         triggeredById: staffUserId,
         recipientId: request.parkingRecord.ownerId,
+        isRead: true,
       });
     }
 

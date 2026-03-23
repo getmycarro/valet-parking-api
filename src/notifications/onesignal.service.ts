@@ -69,8 +69,8 @@ export class OneSignalService {
     await this.send({
       headings: { en: title, es: title },
       contents: { en: message, es: message },
-      include_aliases: { external_id: [userId] },
-      target_channel: 'push',
+      include_external_user_ids: [userId],
+      channel_for_external_user_ids: 'push',
       data,
     });
   }

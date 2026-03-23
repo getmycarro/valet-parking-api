@@ -36,6 +36,7 @@ export class NotificationsService {
           companyId: dto.companyId,
           triggeredById: dto.triggeredById,
           recipientId: dto.recipientId,
+          isRead: dto.isRead ?? false,
         },
       });
 
@@ -392,6 +393,7 @@ export class NotificationsService {
       companyId,
       triggeredById: staffUserId,
       recipientId: ownerId,
+      isRead: true,
     });
   }
 
@@ -421,6 +423,7 @@ export class NotificationsService {
       companyId,
       triggeredById: staffUserId,
       recipientId: ownerId,
+      isRead: true,
     });
   }
 }
