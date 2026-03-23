@@ -27,9 +27,11 @@ export class OneSignalService {
         body: JSON.stringify({ app_id: this.appId, ...body }),
       });
 
+      const text = await res.text();
       if (!res.ok) {
-        const text = await res.text();
         this.logger.error(`OneSignal error ${res.status}: ${text}`);
+      } else {
+        this.logger.log(`OneSignal response: ${text}`);
       }
     } catch (error) {
       this.logger.error(`OneSignal request failed: ${error.message}`);
