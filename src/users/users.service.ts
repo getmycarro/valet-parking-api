@@ -273,6 +273,7 @@ export class UsersService {
     });
   }
 
+<<<<<<< HEAD
   // ── 8. Editar mi cuenta (password, idNumber, name) ────
   async updateMe(userId: string, dto: UpdateMeDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -300,6 +301,16 @@ export class UsersService {
     return this.prisma.user.update({
       where: { id: userId },
       data: updateData,
+=======
+  // ── 8. Actualizar ID de notificación ───────────────────
+  async updateNotificationId(userId: string, notificationId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException("User not found");
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { notificationId },
+>>>>>>> 854be4a (fix)
       select: USER_SELECT,
     });
   }

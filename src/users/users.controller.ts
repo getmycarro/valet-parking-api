@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Put,
   Body,
   Param,
   Query,
@@ -10,7 +11,12 @@ import {
 } from "@nestjs/common";
 import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
+<<<<<<< HEAD
 import { UpdateUserDto, UpdateProfileDto, UpdateMeDto } from "./dto/update-user.dto";
+=======
+import { UpdateUserDto, UpdateProfileDto } from "./dto/update-user.dto";
+import { UpdateUserNotificationIdDto } from "./dto/update-notification-id.dto";
+>>>>>>> 854be4a (fix)
 import { FilterUsersDto } from "./dto/filter-users.dto";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
@@ -85,5 +91,14 @@ export class UsersController {
   @Roles(UserRole.SUPER_ADMIN)
   updateUser(@Param("id") id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.updateUser(id, dto);
+  }
+
+  // 8. Actualizar ID de notificación push — cualquier usuario autenticado
+  @Put("update-notification-id")
+  updateNotificationId(
+    @Body() dto: UpdateUserNotificationIdDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.updateNotificationId(user.id, dto.notificationID);
   }
 }

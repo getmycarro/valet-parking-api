@@ -122,6 +122,7 @@ model User {
   idNumber String?  @unique
   photoUrl String?  @db.Text
   isActive Boolean  @default(true)
+  notificationId String? @map("notification_id")
 
   deletedAt   DateTime?
   deletedById String?
