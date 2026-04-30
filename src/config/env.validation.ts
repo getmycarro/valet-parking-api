@@ -29,7 +29,7 @@ export class EnvironmentVariables {
 
   @IsString()
   @IsNotEmpty()
-  ONESIGNAL_API_KEY: string;
+  ONESIGNAL_REST_API_KEY: string;
 }
 
 export async function validate(config: Record<string, unknown>) {

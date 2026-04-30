@@ -13,12 +13,9 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
 import { EmailService } from "./email/email.service";
 import { CompaniesModule } from "./companies/companies.module";
 import { UsersModule } from "./users/users.module";
-<<<<<<< HEAD
 import { NotificationsModule } from "./notifications/notifications.module";
 import { RequestsModule } from "./requests/requests.module";
-=======
 import { validate } from "./config/env.validation";
->>>>>>> 854be4a (fix)
 
 @Module({
   imports: [

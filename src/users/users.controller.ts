@@ -11,12 +11,8 @@ import {
 } from "@nestjs/common";
 import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
-<<<<<<< HEAD
 import { UpdateUserDto, UpdateProfileDto, UpdateMeDto } from "./dto/update-user.dto";
-=======
-import { UpdateUserDto, UpdateProfileDto } from "./dto/update-user.dto";
 import { UpdateUserNotificationIdDto } from "./dto/update-notification-id.dto";
->>>>>>> 854be4a (fix)
 import { FilterUsersDto } from "./dto/filter-users.dto";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
