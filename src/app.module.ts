@@ -20,6 +20,7 @@ import { PaymentReferencesModule } from "./payment-references/payment-references
 import { CarBrandsModule } from "./car-brands/car-brands.module";
 import { WorkdaysModule } from "./workdays/workdays.module";
 import { validate } from "./config/env.validation";
+import { AppController } from "./app.controller";
 
 @Module({
   imports: [
@@ -42,7 +43,7 @@ import { validate } from "./config/env.validation";
     CarBrandsModule,
     WorkdaysModule,
   ],
-  controllers: [],
+  controllers: [AppController],
   providers: [
     // Global guards
     {

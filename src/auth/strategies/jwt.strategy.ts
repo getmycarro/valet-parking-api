@@ -64,7 +64,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         const user = await this.resolveUserFromFirebase(decoded);
         this.success(user);
         return;
-      } catch {
+      } catch (err) {
+        if (err instanceof UnauthorizedException) {
+          this.fail({ message: err.message }, 401);
+          return;
+        }
         // Not a valid Firebase token — fall through to custom JWT verification
       }
     }
