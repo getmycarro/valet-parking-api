@@ -5,7 +5,7 @@ import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { CreatePaymentMethodDto } from "./dto/create-payment-method.dto";
 import { UpdatePaymentStatusDto } from "./dto/update-payment-status.dto";
 import { FilterPaymentDto } from "./dto/filter-payment.dto";
-import { PaymentStatus, ParkingRecordStatus, Prisma, PlanType, FeeType, PaymentMethodType } from "@prisma/client";
+import { PaymentStatus, ParkingRecordStatus, Prisma, PlanType, FeeType, PaymentMethodType, NotificationType } from "@prisma/client";
 
 @Injectable()
 export class PaymentsService {
@@ -252,6 +252,33 @@ export class PaymentsService {
             data: { status: ParkingRecordStatus.UNPAID },
           });
         }
+      }
+    }
+
+    const ownerId = payment.parkingRecord?.ownerId;
+    const companyId = payment.parkingRecord?.companyId;
+
+    if (ownerId && companyId) {
+      let notifTitle: string | undefined;
+      let notifMessage: string | undefined;
+
+      if (dto.status === PaymentStatus.RECEIVED) {
+        notifTitle = 'Pago recibido';
+        notifMessage = 'Tu pago fue confirmado. Tu vehículo está listo para retiro.';
+      } else if (dto.status === PaymentStatus.CANCELLED) {
+        notifTitle = 'Pago cancelado';
+        notifMessage = 'Tu pago fue cancelado. Por favor, realiza un nuevo pago.';
+      }
+
+      if (notifTitle && notifMessage) {
+        void this.notifications.create({
+          type: NotificationType.PAYMENT_STATUS_UPDATED,
+          title: notifTitle,
+          message: notifMessage,
+          recipientId: ownerId,
+          companyId,
+          data: { parkingRecordId: payment.parkingRecordId, paymentId: id, status: dto.status },
+        });
       }
     }
 

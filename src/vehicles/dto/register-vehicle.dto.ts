@@ -44,4 +44,8 @@ export class RegisterVehicleDto {
   @IsOptional()
   @IsString()
   companyId?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
 }

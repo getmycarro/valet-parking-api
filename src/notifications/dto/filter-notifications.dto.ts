@@ -28,4 +28,9 @@ export class FilterNotificationsDto {
   @IsOptional()
   @IsString()
   recipientId?: string;
+
+  /** Filtrar notificaciones vinculadas a un ParkingRecord específico */
+  @IsOptional()
+  @IsString()
+  parkingRecordId?: string;
 }

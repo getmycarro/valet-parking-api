@@ -15,6 +15,10 @@ import { CompaniesModule } from "./companies/companies.module";
 import { UsersModule } from "./users/users.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { RequestsModule } from "./requests/requests.module";
+import { FirebaseModule } from "./firebase/firebase.module";
+import { PaymentReferencesModule } from "./payment-references/payment-references.module";
+import { CarBrandsModule } from "./car-brands/car-brands.module";
+import { WorkdaysModule } from "./workdays/workdays.module";
 import { validate } from "./config/env.validation";
 
 @Module({
@@ -25,6 +29,7 @@ import { validate } from "./config/env.validation";
       validate,
     }),
     PrismaModule,
+    FirebaseModule,
     AuthModule,
     VehiclesModule,
     PaymentsModule,
@@ -33,6 +38,9 @@ import { validate } from "./config/env.validation";
     UsersModule,
     NotificationsModule,
     RequestsModule,
+    PaymentReferencesModule,
+    CarBrandsModule,
+    WorkdaysModule,
   ],
   controllers: [],
   providers: [

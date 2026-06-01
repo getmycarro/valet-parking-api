@@ -67,11 +67,18 @@ export class OneSignalService {
     title: string,
     message: string,
     data?: Record<string, any>,
+    subscriptionId?: string,
   ): Promise<void> {
+    const targets: Record<string, unknown> = {
+      include_external_user_ids: [userId],
+    };
+    if (subscriptionId) {
+      targets.include_subscription_ids = [subscriptionId];
+    }
     await this.send({
       headings: { en: title, es: title },
       contents: { en: message, es: message },
-      include_external_user_ids: [userId],
+      ...targets,
       channel_for_external_user_ids: 'push',
       data,
     });

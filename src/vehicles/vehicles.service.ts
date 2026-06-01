@@ -5,34 +5,65 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { WorkdaysService } from "../workdays/workdays.service";
 import { RegisterVehicleDto } from "./dto/register-vehicle.dto";
 import { CheckoutVehicleDto } from "./dto/checkout-vehicle.dto";
-import { Prisma, ParkingRecordStatus, PaymentStatus, UserRole } from "@prisma/client";
+import { Prisma, ParkingRecordStatus, PaymentStatus, UserRole, NotificationType, WorkdayStatus } from "@prisma/client";
 import { FilterVehiclesDto } from "./dto/filter-vehicles.dto";
 import { UpdateParkingRecordStatusDto } from "./dto/update-parking-record-status.dto";
 import * as bcrypt from "bcrypt";
 
 @Injectable()
 export class VehiclesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+    private workdaysService: WorkdaysService,
+  ) {}
 
   async registerVehicle(dto: RegisterVehicleDto, registerRecordId: string, companyId?: string) {
-    // 1. Verificar si el auto ya tiene un check-in activo
-    const existingRecord = await this.prisma.parkingRecord.findFirst({
-      where: {
-        plate: dto.plate,
-        status: { not: ParkingRecordStatus.FREE },
-      },
-    });
+    // Resolve plate when only vehicleId is provided (no plate in payload)
+    let resolvedPlate = dto.plate;
+    if (!resolvedPlate && dto.vehicleId) {
+      const v = await this.prisma.vehicle.findUnique({
+        where: { id: dto.vehicleId },
+        select: { plate: true },
+      });
+      resolvedPlate = v?.plate;
+    }
 
-    if (existingRecord) {
-      throw new ConflictException(
-        "Vehicle with this plate is already checked in",
-      );
+    // Only check for conflict if we know the plate
+    if (resolvedPlate) {
+      const existingRecord = await this.prisma.parkingRecord.findFirst({
+        where: {
+          plate: resolvedPlate,
+          status: { not: ParkingRecordStatus.FREE },
+        },
+      });
+      if (existingRecord) {
+        throw new ConflictException(
+          "Vehicle with this plate is already checked in",
+        );
+      }
     }
 
     // checkInValetId apunta a Valet (no User), solo asignar si se provee
     const checkInValetId = dto.valedId || undefined;
+
+    // Look up the active workday for the company (outside the transaction — read-only)
+    const activeWorkday = companyId
+      ? await this.prisma.workday.findFirst({
+          where: { companyId, status: WorkdayStatus.ACTIVE },
+          select: { id: true },
+        })
+      : null;
+
+    if (companyId && !activeWorkday) {
+      throw new BadRequestException(
+        'No active workday for this company. Open a workday before registering vehicles.',
+      );
+    }
 
     // 2. Buscar usuario por userId, idNumber o email
     let user = null;
@@ -77,17 +108,37 @@ export class VehiclesService {
         });
       }
 
-      const parkingRecord = await this.prisma.parkingRecord.create({
-        data: {
-          plate: vehicle?.plate ?? dto.plate,
-          brand: vehicle?.brand ?? dto.brand,
-          model: vehicle?.model ?? dto.model,
-          color: vehicle?.color ?? dto.color,
-          ownerId: user.id,
-          registerRecordId,
-          checkInValetId,
-          companyId: companyId || undefined,
-        },
+      const finalVehicle = vehicle;
+      const ownerId = user.id;
+
+      const parkingRecord = await this.prisma.$transaction(async (tx) => {
+        let workdayId: string | undefined;
+        let ticketNumber: number | undefined;
+
+        if (activeWorkday) {
+          const updated = await tx.workday.update({
+            where: { id: activeWorkday.id },
+            data: { lastTicketNumber: { increment: 1 } },
+            select: { lastTicketNumber: true },
+          });
+          workdayId = activeWorkday.id;
+          ticketNumber = updated.lastTicketNumber;
+        }
+
+        return tx.parkingRecord.create({
+          data: {
+            plate: finalVehicle?.plate ?? dto.plate,
+            brand: finalVehicle?.brand ?? dto.brand,
+            model: finalVehicle?.model ?? dto.model,
+            color: finalVehicle?.color ?? dto.color,
+            ownerId,
+            registerRecordId,
+            checkInValetId,
+            companyId: companyId || undefined,
+            workdayId,
+            ticketNumber,
+          },
+        });
       });
 
       return { parkingRecord, isNewUser: false };
@@ -98,9 +149,10 @@ export class VehiclesService {
 
     const newUser = await this.prisma.user.create({
       data: {
-        email: dto.email,
+        email: dto.email || `${(dto.idNumber ?? '').replace(/\W/g, '')}@noemail.getmycarro.com`,
         idNumber: dto.idNumber,
         name: dto.name,
+        phone: dto.phone || undefined,
         password,
         role: UserRole.CLIENT,
         ownedVehicles: {
@@ -117,17 +169,36 @@ export class VehiclesService {
       },
     });
 
-    const parkingRecord = await this.prisma.parkingRecord.create({
-      data: {
-        plate: dto.plate,
-        brand: dto.brand,
-        model: dto.model,
-        color: dto.color,
-        ownerId: newUser.id,
-        registerRecordId,
-        checkInValetId,
-        companyId: companyId || undefined,
-      },
+    const newUserId = newUser.id;
+
+    const parkingRecord = await this.prisma.$transaction(async (tx) => {
+      let workdayId: string | undefined;
+      let ticketNumber: number | undefined;
+
+      if (activeWorkday) {
+        const updated = await tx.workday.update({
+          where: { id: activeWorkday.id },
+          data: { lastTicketNumber: { increment: 1 } },
+          select: { lastTicketNumber: true },
+        });
+        workdayId = activeWorkday.id;
+        ticketNumber = updated.lastTicketNumber;
+      }
+
+      return tx.parkingRecord.create({
+        data: {
+          plate: dto.plate,
+          brand: dto.brand,
+          model: dto.model,
+          color: dto.color,
+          ownerId: newUserId,
+          registerRecordId,
+          checkInValetId,
+          companyId: companyId || undefined,
+          workdayId,
+          ticketNumber,
+        },
+      });
     });
 
     return { parkingRecord, isNewUser: true };
@@ -266,6 +337,15 @@ export class VehiclesService {
             date: "desc",
           },
         },
+        paymentReferences: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            imageUrl: true,
+            createdAt: true,
+            uploadedBy: { select: { id: true, name: true } },
+          },
+        },
       },
     });
 
@@ -281,104 +361,108 @@ export class VehiclesService {
     const limit = options.limit || 20;
     const skip = (page - 1) * limit;
 
+    // whereBase — company + field + search filters, NO status filter (used for tab counts)
+    const whereBase: Prisma.ParkingRecordWhereInput = {};
+    // where — same as whereBase plus status filter (used for the main query)
     const where: Prisma.ParkingRecordWhereInput = {};
 
-    if (options.companyId != null) {
-      where.companyId = options.companyId;
-    } else {
-      where.companyId = { in: companyIds };
-    }
-    if (options.status === "active") {
-      where.status = ParkingRecordStatus.UNPAID;
-    } else if (options.status === "pending_delivery") {
-      where.status = ParkingRecordStatus.PAID;
-    } else if (options.status === "completed") {
-      where.status = ParkingRecordStatus.FREE;
-    }
+    const companyFilter: Prisma.ParkingRecordWhereInput =
+      options.companyId != null
+        ? { companyId: options.companyId }
+        : { companyId: { in: companyIds } };
 
-    // Field filters (case-insensitive partial match)
+    Object.assign(whereBase, companyFilter);
+    Object.assign(where, companyFilter);
+
+    // Field filters
     if (options.plate) {
-      where.plate = { contains: options.plate, mode: "insensitive" };
+      whereBase.plate = { contains: options.plate, mode: "insensitive" };
+      where.plate = whereBase.plate;
     }
     if (options.brand) {
-      where.brand = { contains: options.brand, mode: "insensitive" };
+      whereBase.brand = { contains: options.brand, mode: "insensitive" };
+      where.brand = whereBase.brand;
     }
     if (options.model) {
-      where.model = { contains: options.model, mode: "insensitive" };
+      whereBase.model = { contains: options.model, mode: "insensitive" };
+      where.model = whereBase.model;
     }
     if (options.color) {
-      where.color = { contains: options.color, mode: "insensitive" };
+      whereBase.color = { contains: options.color, mode: "insensitive" };
+      where.color = whereBase.color;
     }
 
     // Date range filter on checkInAt
     if (options.dateFrom || options.dateTo) {
-      where.checkInAt = {};
-      if (options.dateFrom) {
-        (where.checkInAt as Prisma.DateTimeFilter).gte = new Date(
-          options.dateFrom,
-        );
-      }
+      const dateFilter: Prisma.DateTimeFilter = {};
+      if (options.dateFrom) dateFilter.gte = new Date(options.dateFrom);
       if (options.dateTo) {
         const endDate = new Date(options.dateTo);
         endDate.setHours(23, 59, 59, 999);
-        (where.checkInAt as Prisma.DateTimeFilter).lte = endDate;
+        dateFilter.lte = endDate;
       }
+      whereBase.checkInAt = dateFilter;
+      where.checkInAt = dateFilter;
     }
 
-    // Global search across plate, brand, model
+    // Global search — plate, brand, model
     if (options.search) {
-      where.OR = [
+      const searchOR: Prisma.ParkingRecordWhereInput[] = [
         { plate: { contains: options.search, mode: "insensitive" } },
         { brand: { contains: options.search, mode: "insensitive" } },
         { model: { contains: options.search, mode: "insensitive" } },
       ];
+      whereBase.OR = searchOR;
+      where.OR = searchOR;
     }
 
-    const [parkingRecords, activeCount, pendingCount, completedCount, total] =
-      await Promise.all([
-        this.prisma.parkingRecord.findMany({
-          where,
-          skip,
-          take: limit,
-          include: {
-            registerRecord: {
-              select: {
-                id: true,
-                name: true,
-                idNumber: true,
-              },
-            },
-            checkInValet: {
-              select: {
-                id: true,
-                name: true,
-                idNumber: true,
-              },
-            },
-            checkOutValet: {
-              select: {
-                id: true,
-                name: true,
-                idNumber: true,
-              },
-            },
-            payments: true,
-          },
-          orderBy: {
-            createdAt: "desc",
-          },
-        }),
-        this.prisma.parkingRecord.count({
-          where: { ...where, status: ParkingRecordStatus.UNPAID },
-        }),
-        this.prisma.parkingRecord.count({
-          where: { ...where, status: ParkingRecordStatus.PAID },
-        }),
-        this.prisma.parkingRecord.count({
-          where: { ...where, status: ParkingRecordStatus.FREE },
-        }),
-        this.prisma.parkingRecord.count({ where }),
-      ]);
+    if (options.workdayId) {
+      where.workdayId = options.workdayId;
+    }
+
+    // Status filter — applied only to `where`, not `whereBase`
+    if (options.status === "active") {
+      where.status = ParkingRecordStatus.UNPAID;
+    } else if (options.status === "in_review") {
+      where.status = ParkingRecordStatus.PAYMENT_UNDER_REVIEW;
+    } else if (options.status === "pending_payment") {
+      where.status = { in: [ParkingRecordStatus.UNPAID, ParkingRecordStatus.PAYMENT_UNDER_REVIEW] };
+    } else if (options.status === "pending_delivery") {
+      where.status = ParkingRecordStatus.PAID;
+    } else if (options.status === "completed") {
+      where.status = ParkingRecordStatus.FREE;
+    } else if (options.status === "in_lot") {
+      where.status = { not: ParkingRecordStatus.FREE };
+    }
+
+    const include = {
+      registerRecord: { select: { id: true, name: true, idNumber: true } },
+      checkInValet:   { select: { id: true, name: true, idNumber: true } },
+      checkOutValet:  { select: { id: true, name: true, idNumber: true } },
+      payments: true,
+    } satisfies Prisma.ParkingRecordInclude;
+
+    const [
+      parkingRecords,
+      activeCount,
+      inReviewCount,
+      pendingCount,
+      completedCount,
+      total,
+    ] = await Promise.all([
+      this.prisma.parkingRecord.findMany({
+        where,
+        skip,
+        take: limit,
+        include,
+        orderBy: { createdAt: "desc" },
+      }),
+      this.prisma.parkingRecord.count({ where: { ...whereBase, status: ParkingRecordStatus.UNPAID } }),
+      this.prisma.parkingRecord.count({ where: { ...whereBase, status: ParkingRecordStatus.PAYMENT_UNDER_REVIEW } }),
+      this.prisma.parkingRecord.count({ where: { ...whereBase, status: ParkingRecordStatus.PAID } }),
+      this.prisma.parkingRecord.count({ where: { ...whereBase, status: ParkingRecordStatus.FREE } }),
+      this.prisma.parkingRecord.count({ where }),
+    ]);
 
     return {
       data: parkingRecords,
@@ -387,8 +471,11 @@ export class VehiclesService {
         limit,
         totalPages: Math.ceil(total / limit),
         active: activeCount,
+        in_review: inReviewCount,
+        pending_payment: activeCount + inReviewCount,
         pending_delivery: pendingCount,
         completed: completedCount,
+        in_lot: activeCount + inReviewCount + pendingCount,
         all: total,
       },
     };
@@ -450,7 +537,7 @@ export class VehiclesService {
       updateData.notes = dto.notes;
     }
 
-    return this.prisma.parkingRecord.update({
+    const updatedRecord = await this.prisma.parkingRecord.update({
       where: { id },
       data: updateData,
       include: {
@@ -459,6 +546,34 @@ export class VehiclesService {
         checkOutValet: { select: { id: true, name: true, idNumber: true } },
       },
     });
+
+    const newStatus = dto.status;
+    let notifTitle: string | undefined;
+    let notifMessage: string | undefined;
+
+    if (newStatus === ParkingRecordStatus.PAID) {
+      notifTitle = 'Vehículo listo';
+      notifMessage = 'Tu pago fue confirmado. Tu vehículo está listo para ser retirado.';
+    } else if (newStatus === ParkingRecordStatus.UNPAID) {
+      notifTitle = 'Pago pendiente';
+      notifMessage = 'El estado de tu ticket fue actualizado. Tienes un pago pendiente.';
+    } else if (newStatus === ParkingRecordStatus.PAYMENT_UNDER_REVIEW) {
+      notifTitle = 'Pago en revisión';
+      notifMessage = 'Tu pago está siendo revisado. Te notificaremos pronto.';
+    }
+
+    if (notifTitle && notifMessage && updatedRecord.ownerId && updatedRecord.companyId) {
+      void this.notificationsService.create({
+        type: NotificationType.PAYMENT_STATUS_UPDATED,
+        title: notifTitle,
+        message: notifMessage,
+        recipientId: updatedRecord.ownerId,
+        companyId: updatedRecord.companyId,
+        data: { parkingRecordId: updatedRecord.id, status: newStatus },
+      });
+    }
+
+    return updatedRecord;
   }
 
   async getVehiclesByOwnerId(ownerId: string) {

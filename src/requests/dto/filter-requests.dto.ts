@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsInt, Min } from 'class-validator';
+import { IsOptional, IsEnum, IsInt, IsString, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { RequestStatus } from '@prisma/client';
 
@@ -18,4 +18,8 @@ export class FilterRequestsDto {
   @IsOptional()
   @IsEnum(RequestStatus)
   status?: RequestStatus;
+
+  @IsOptional()
+  @IsString()
+  parkingRecordId?: string;
 }

@@ -42,11 +42,21 @@ export class NotificationsService {
 
       // Push via OneSignal
       if (dto.recipientId) {
-        void this.onesignal.sendToUser(dto.recipientId, dto.title, dto.message, {
-          type: notification.type,
-          notificationId: notification.id,
-          ...((dto.data as Record<string, any>) ?? {}),
+        const recipient = await this.prisma.user.findUnique({
+          where: { id: dto.recipientId },
+          select: { notificationId: true },
         });
+        void this.onesignal.sendToUser(
+          dto.recipientId,
+          dto.title,
+          dto.message,
+          {
+            type: notification.type,
+            notificationId: notification.id,
+            ...((dto.data as Record<string, any>) ?? {}),
+          },
+          recipient?.notificationId ?? undefined,
+        );
       } else {
         void this.onesignal.sendToCompany(dto.companyId, dto.title, dto.message, {
           type: notification.type,
@@ -96,6 +106,13 @@ export class NotificationsService {
       (userRole === UserRole.ADMIN || userRole === UserRole.MANAGER)
     ) {
       where.recipientId = filters.recipientId;
+    }
+
+    if (filters.parkingRecordId !== undefined) {
+      where.data = {
+        path: ['parkingRecordId'],
+        equals: filters.parkingRecordId,
+      };
     }
 
     const [notifications, total, unreadCount] = await Promise.all([

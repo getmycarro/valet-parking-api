@@ -33,8 +33,8 @@ export class FilterVehiclesDto {
   color?: string;
 
   @IsOptional()
-  @IsIn(["active", "completed", "pending_delivery", "all"])
-  status?: "active" | "completed" | "pending_delivery" | "all";
+  @IsIn(["active", "completed", "pending_delivery", "in_review", "in_lot", "pending_payment", "all"])
+  status?: "active" | "completed" | "pending_delivery" | "in_review" | "in_lot" | "pending_payment" | "all";
 
   @IsOptional()
   @IsString()
@@ -47,4 +47,8 @@ export class FilterVehiclesDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  workdayId?: string;
 }

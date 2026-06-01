@@ -95,6 +95,10 @@ export class RequestsService {
       where.status = filters.status;
     }
 
+    if (filters.parkingRecordId) {
+      where.parkingRecordId = filters.parkingRecordId;
+    }
+
     const [requests, total] = await Promise.all([
       this.prisma.vehicleRequest.findMany({
         where,

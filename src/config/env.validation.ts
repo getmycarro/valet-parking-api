@@ -1,5 +1,5 @@
 import { plainToInstance } from 'class-transformer';
-import { IsString, IsNumber, IsNotEmpty, validate as classValidate } from 'class-validator';
+import { IsString, IsNumber, IsNotEmpty, IsOptional, validate as classValidate } from 'class-validator';
 
 export class EnvironmentVariables {
   @IsString()
@@ -30,6 +30,19 @@ export class EnvironmentVariables {
   @IsString()
   @IsNotEmpty()
   ONESIGNAL_REST_API_KEY: string;
+
+  // Firebase Admin SDK — optional for backward compatibility
+  @IsOptional()
+  @IsString()
+  FIREBASE_PROJECT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  FIREBASE_CLIENT_EMAIL?: string;
+
+  @IsOptional()
+  @IsString()
+  FIREBASE_PRIVATE_KEY?: string;
 }
 
 export async function validate(config: Record<string, unknown>) {
