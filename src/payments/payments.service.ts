@@ -309,6 +309,118 @@ export class PaymentsService {
     });
   }
 
+  async exportXlsx(
+    dto: { dateFrom: string; dateTo: string; status?: any; paymentMethodId?: string },
+    companyIds: string[],
+  ): Promise<Buffer> {
+    const from = new Date(dto.dateFrom);
+    from.setUTCHours(0, 0, 0, 0);
+    const to = new Date(dto.dateTo);
+    to.setUTCHours(23, 59, 59, 999);
+
+    const where: Prisma.PaymentWhereInput = {
+      parkingRecord: { companyId: { in: companyIds } },
+      createdAt: { gte: from, lte: to },
+    };
+    if (dto.status) where.status = dto.status;
+    if (dto.paymentMethodId) where.paymentMethodId = dto.paymentMethodId;
+
+    const payments = await this.prisma.payment.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      include: {
+        parkingRecord: { select: { plate: true, checkInAt: true } },
+        paymentMethod: { select: { name: true } },
+        processedBy: { select: { name: true } },
+      },
+    });
+
+    // Build workbook with ExcelJS
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'GetMyCarro';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Pagos', {
+      views: [{ state: 'frozen', ySplit: 1 }],
+    });
+
+    // Column definitions
+    sheet.columns = [
+      { header: 'Fecha',         key: 'date',        width: 20 },
+      { header: 'Placa',         key: 'plate',       width: 12 },
+      { header: 'Método',        key: 'method',      width: 20 },
+      { header: 'Monto USD',     key: 'amountUSD',   width: 14 },
+      { header: 'Monto Bs',      key: 'amountBs',    width: 16 },
+      { header: 'Tasa',          key: 'rate',        width: 12 },
+      { header: 'Propina',       key: 'tip',         width: 12 },
+      { header: 'Comisión',      key: 'fee',         width: 12 },
+      { header: 'Estado',        key: 'status',      width: 14 },
+      { header: 'Referencia',    key: 'reference',   width: 22 },
+      { header: 'Procesado por', key: 'processedBy', width: 22 },
+    ];
+
+    // Header row style
+    const headerRow = sheet.getRow(1);
+    headerRow.eachCell((cell: any) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        bottom: { style: 'thin', color: { argb: 'FF60A5FA' } },
+      };
+    });
+    headerRow.height = 22;
+
+    const STATUS_LABELS: Record<string, string> = {
+      RECEIVED:  'Aprobado',
+      PENDING:   'Pendiente',
+      CANCELLED: 'Cancelado',
+    };
+
+    // Data rows
+    payments.forEach((p) => {
+      sheet.addRow({
+        date: new Date(p.createdAt).toLocaleString('es-VE', {
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+        }),
+        plate:       p.parkingRecord?.plate ?? '',
+        method:      p.paymentMethod?.name ?? '',
+        amountUSD:   p.amountUSD,
+        amountBs:    p.amountBs ?? '',
+        rate:        p.exchangeRate ?? '',
+        tip:         p.tip ?? 0,
+        fee:         p.fee ?? '',
+        status:      STATUS_LABELS[p.status] ?? p.status,
+        reference:   p.reference ?? '',
+        processedBy: p.processedBy?.name ?? '',
+      });
+    });
+
+    // Totals row
+    const totalRow = sheet.addRow({
+      date:      'TOTALES',
+      amountUSD: payments.reduce((s, p) => s + (p.amountUSD ?? 0), 0),
+      amountBs:  payments.reduce((s, p) => s + (p.amountBs ?? 0), 0),
+      tip:       payments.reduce((s, p) => s + (p.tip ?? 0), 0),
+    });
+    totalRow.eachCell((cell: any) => {
+      cell.font = { bold: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+    });
+    totalRow.getCell('date').font = { bold: true, color: { argb: 'FF60A5FA' } };
+
+    // Number format for numeric columns
+    ['amountUSD', 'amountBs', 'tip', 'fee', 'rate'].forEach((col) => {
+      sheet.getColumn(col).numFmt = '#,##0.00';
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
+  }
+
   async processExpiredPlans() {
     const now = new Date();
     const oneMonthAgo = new Date(now);
