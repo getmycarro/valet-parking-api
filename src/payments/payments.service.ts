@@ -80,6 +80,7 @@ export class PaymentsService {
         data: { paymentId: payment.id, parkingRecordId: payment.parkingRecordId, amountUSD: payment.amountUSD, plate: payment.parkingRecord.plate },
         companyId: payment.parkingRecord.companyId,
         triggeredById: userId,
+        parkingRecordId: payment.parkingRecordId,
       });
     }
 
@@ -280,6 +281,7 @@ export class PaymentsService {
           recipientId: ownerId,
           companyId,
           data: { parkingRecordId: payment.parkingRecordId, paymentId: id, status: dto.status },
+          parkingRecordId: payment.parkingRecordId,
         });
       }
     }
@@ -297,9 +299,13 @@ export class PaymentsService {
     });
   }
 
-  async getPaymentMethods() {
+  async getPaymentMethods(companyId?: string) {
     return this.prisma.paymentMethod.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        deletedAt: null,
+        ...(companyId ? { companyId } : {}),
+      },
       orderBy: { createdAt: "desc" },
       include: {
         company: {

@@ -29,4 +29,8 @@ export class CreateNotificationDto {
   @IsOptional()
   @IsBoolean()
   isRead?: boolean;
+
+  @IsOptional()
+  @IsString()
+  parkingRecordId?: string;
 }

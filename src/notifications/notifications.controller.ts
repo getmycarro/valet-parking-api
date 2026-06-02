@@ -7,7 +7,10 @@ import {
   Body,
   Query,
   UseGuards,
+  Sse,
+  MessageEvent,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
 import { NotificationsService } from './notifications.service';
 import { CheckoutRequestDto } from './dto/checkout-request.dto';
 import { ObjectSearchRequestDto } from './dto/object-search-request.dto';
@@ -69,6 +72,13 @@ export class NotificationsController {
       user.id,
       user.role,
     );
+  }
+
+  // ⚠️ Must be declared BEFORE :id routes to avoid route conflicts
+  @Sse('stream')
+  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT, UserRole.CLIENT)
+  stream(@CurrentUser() user: any): Observable<MessageEvent> {
+    return this.notificationsService.getCompanyStream(user.companyId);
   }
 
   @Patch(':id/read')

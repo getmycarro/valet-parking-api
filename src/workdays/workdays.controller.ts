@@ -6,11 +6,14 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { WorkdaysService } from './workdays.service';
 import { OpenWorkdayDto } from './dto/open-workday.dto';
 import { FilterWorkdaysDto } from './dto/filter-workdays.dto';
+import { ReportWorkdaysDto } from './dto/report-workdays.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -47,6 +50,36 @@ export class WorkdaysController {
     const companyIds =
       user.companyUsers?.map((cu: any) => cu.company?.id).filter(Boolean) || [];
     return this.workdaysService.findAll(filters, companyIds);
+  }
+
+  // GET /api/workdays/report — must be declared before /:id
+  @Get('report')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
+  getPaymentReport(@Query() query: ReportWorkdaysDto, @CurrentUser() user: any) {
+    return this.workdaysService.getPaymentReport(user.companyId, query);
+  }
+
+  // GET /api/workdays/export — must be declared before /:id
+  @Get('export')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
+  async exportReport(
+    @Query() query: ReportWorkdaysDto,
+    @CurrentUser() user: any,
+    @Res() res: Response,
+  ) {
+    const label = query.workdayId
+      ? `jornada_${query.workdayId.slice(0, 8)}`
+      : `jornadas_${query.dateFrom ?? ''}_${query.dateTo ?? ''}`;
+    const buffer = await this.workdaysService.exportWorkdayReport(
+      user.companyId,
+      query,
+    );
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="reporte_${label}.xlsx"`,
+    });
+    res.send(buffer);
   }
 
   // GET /api/workdays/:id/stats — must be declared before /:id

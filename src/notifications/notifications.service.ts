@@ -6,6 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { Subject, Observable } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { OneSignalService } from './onesignal.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
@@ -18,6 +19,7 @@ import { FilterNotificationsDto } from './dto/filter-notifications.dto';
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
+  private readonly companyStreams = new Map<string, Subject<MessageEvent>>();
 
   constructor(
     private prisma: PrismaService,
@@ -37,8 +39,21 @@ export class NotificationsService {
           triggeredById: dto.triggeredById,
           recipientId: dto.recipientId,
           isRead: dto.isRead ?? false,
+          parkingRecordId: dto.parkingRecordId ?? null,
         },
       });
+
+      // Emit SSE event to connected dashboard clients of this company
+      const subject = this.companyStreams.get(notification.companyId);
+      if (subject) {
+        subject.next({
+          data: JSON.stringify({
+            id: notification.id,
+            type: notification.type,
+            title: notification.title,
+          }),
+        } as MessageEvent);
+      }
 
       // Push via OneSignal
       if (dto.recipientId) {
@@ -109,10 +124,7 @@ export class NotificationsService {
     }
 
     if (filters.parkingRecordId !== undefined) {
-      where.data = {
-        path: ['parkingRecordId'],
-        equals: filters.parkingRecordId,
-      };
+      where.parkingRecordId = filters.parkingRecordId;
     }
 
     const [notifications, total, unreadCount] = await Promise.all([
@@ -291,6 +303,17 @@ export class NotificationsService {
           ...data,
           acceptedById: staffUserId,
         });
+
+        void this.create({
+          type: isObjectSearch ? 'OBJECT_SEARCH_IN_PROGRESS' : 'CHECKOUT_REQUEST',
+          title,
+          message,
+          companyId: notification.companyId,
+          recipientId: parkingRecord.ownerId,
+          triggeredById: staffUserId,
+          parkingRecordId: data.parkingRecordId ?? null,
+          isRead: true,
+        });
       }
     }
 
@@ -347,6 +370,7 @@ export class NotificationsService {
       data: { parkingRecordId: dto.parkingRecordId, notes: dto.notes, ...vehicleInfo },
       companyId,
       triggeredById: userId,
+      parkingRecordId: dto.parkingRecordId,
     });
   }
 
@@ -375,6 +399,7 @@ export class NotificationsService {
       },
       companyId,
       triggeredById: userId,
+      parkingRecordId: dto.parkingRecordId,
     });
   }
 
@@ -411,6 +436,7 @@ export class NotificationsService {
       triggeredById: staffUserId,
       recipientId: ownerId,
       isRead: true,
+      parkingRecordId: dto.parkingRecordId,
     });
   }
 
@@ -441,6 +467,14 @@ export class NotificationsService {
       triggeredById: staffUserId,
       recipientId: ownerId,
       isRead: true,
+      parkingRecordId: dto.parkingRecordId,
     });
+  }
+
+  getCompanyStream(companyId: string): Observable<MessageEvent> {
+    if (!this.companyStreams.has(companyId)) {
+      this.companyStreams.set(companyId, new Subject<MessageEvent>());
+    }
+    return this.companyStreams.get(companyId)!.asObservable();
   }
 }

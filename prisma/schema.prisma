@@ -225,6 +225,7 @@ model ParkingRecord {
   payments           Payment[]
   vehicleRequests    VehicleRequest[]
   paymentReferences  PaymentReference[]
+  notifications      Notification[]
 
   workdayId    String?
   workday      Workday? @relation(fields: [workdayId], references: [id])
@@ -436,6 +437,8 @@ model Notification {
   isRead        Boolean          @default(false)
   companyId     String
   company       Company          @relation(fields: [companyId], references: [id])
+  parkingRecordId String?
+  parkingRecord   ParkingRecord? @relation(fields: [parkingRecordId], references: [id])
   triggeredById String?
   triggeredBy   User?            @relation("TriggeredNotifications", fields: [triggeredById], references: [id])
   recipientId   String?
@@ -447,6 +450,7 @@ model Notification {
   @@index([companyId, isRead])
   @@index([companyId, type])
   @@index([recipientId])
+  @@index([parkingRecordId])
   @@map("notifications")
 }
 

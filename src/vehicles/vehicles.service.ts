@@ -605,6 +605,7 @@ export class VehiclesService {
         recipientId: updatedRecord.ownerId,
         companyId: updatedRecord.companyId,
         data: { parkingRecordId: updatedRecord.id, status: newStatus },
+        parkingRecordId: updatedRecord.id,
       });
     }
 

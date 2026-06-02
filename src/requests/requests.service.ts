@@ -79,6 +79,7 @@ export class RequestsService {
       },
       companyId,
       triggeredById: userId,
+      parkingRecordId: dto.parkingRecordId,
     });
 
     return request;
@@ -176,6 +177,7 @@ export class RequestsService {
         triggeredById: staffUserId,
         recipientId: request.parkingRecord.ownerId,
         isRead: true,
+        parkingRecordId: request.parkingRecordId,
       });
     }
 

@@ -82,8 +82,8 @@ export class PaymentsController {
 
   @Get("methods")
   @Roles(UserRole.ADMIN, UserRole.ATTENDANT)
-  getPaymentMethods() {
-    return this.paymentsService.getPaymentMethods();
+  getPaymentMethods(@CurrentUser() user: any) {
+    return this.paymentsService.getPaymentMethods(user.companyId);
   }
 
   // Endpoint público para cronjob - no requiere autenticación

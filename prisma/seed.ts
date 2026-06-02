@@ -7,7 +7,6 @@ import {
   PlanType,
   FeeType,
   ParkingRecordStatus,
-  NotificationType,
   RequestStatus,
   WorkdayStatus,
 } from '@prisma/client';
@@ -19,6 +18,9 @@ import * as admin from 'firebase-admin';
 dotenv.config();
 
 faker.seed(12345);
+
+const HISTORICAL_EXCHANGE_RATE = 500;
+const CURRENT_EXCHANGE_RATE = 557.97;
 
 const prisma = new PrismaClient();
 
@@ -1073,6 +1075,8 @@ async function seedPayments(
             ? null
             : `REF-${faker.string.numeric(6)}`,
         paymentMethodId: method.id,
+        exchangeRate: HISTORICAL_EXCHANGE_RATE,
+        amountBs: amountUSD * HISTORICAL_EXCHANGE_RATE,
       },
     });
 
@@ -1104,6 +1108,8 @@ async function seedPayments(
             ? null
             : `REF-${faker.string.numeric(6)}`,
         paymentMethodId: method.id,
+        exchangeRate: CURRENT_EXCHANGE_RATE,
+        amountBs: amountUSD * CURRENT_EXCHANGE_RATE,
       },
     });
 
@@ -1135,6 +1141,8 @@ async function seedPayments(
             ? null
             : `REF-${faker.string.numeric(6)}`,
         paymentMethodId: method.id,
+        exchangeRate: CURRENT_EXCHANGE_RATE,
+        amountBs: amountUSD * CURRENT_EXCHANGE_RATE,
       },
     });
 
@@ -1197,120 +1205,6 @@ async function seedVehicleRequests(
   console.log('20 vehicle requests creados (8 PENDING, 7 IN_PROGRESS, 5 COMPLETED).');
 }
 
-async function seedNotifications(
-  prisma: PrismaClient,
-  companies: { companyA: any; companyB: any; companyC: any },
-  clients: any[],
-  allRecords: any[],
-): Promise<void> {
-  console.log('Creando notifications...');
-
-  const companiesArr = [companies.companyA, companies.companyB, companies.companyC];
-
-  const notificationTemplates: Array<{
-    type: NotificationType;
-    title: string;
-    message: string;
-  }> = [
-    {
-      type: NotificationType.PAYMENT_REGISTERED,
-      title: 'Pago registrado',
-      message: 'Se ha registrado un nuevo pago para revisión.',
-    },
-    {
-      type: NotificationType.PAYMENT_REGISTERED,
-      title: 'Nuevo pago recibido',
-      message: 'El cliente ha enviado el comprobante de pago.',
-    },
-    {
-      type: NotificationType.PAYMENT_EXPIRED,
-      title: 'Plan vencido',
-      message: 'El plan de facturación ha expirado. Por favor renueve.',
-    },
-    {
-      type: NotificationType.PAYMENT_EXPIRED,
-      title: 'Pago expirado',
-      message: 'El período de pago ha vencido sin confirmación.',
-    },
-    {
-      type: NotificationType.PAYMENT_STATUS_UPDATED,
-      title: 'Estado de pago actualizado',
-      message: 'Tu pago ha sido confirmado exitosamente.',
-    },
-    {
-      type: NotificationType.PAYMENT_STATUS_UPDATED,
-      title: 'Pago rechazado',
-      message: 'Tu pago no pudo ser verificado. Contáctenos.',
-    },
-    {
-      type: NotificationType.CHECKOUT_REQUEST,
-      title: 'Solicitud de checkout',
-      message: 'Un cliente solicita retirar su vehículo.',
-    },
-    {
-      type: NotificationType.CHECKOUT_REQUEST,
-      title: 'Cliente esperando vehículo',
-      message: 'El cliente está en el mostrador esperando su vehículo.',
-    },
-    {
-      type: NotificationType.OBJECT_SEARCH_REQUEST,
-      title: 'Búsqueda de objeto',
-      message: 'Un cliente reporta haber olvidado un objeto en su vehículo.',
-    },
-    {
-      type: NotificationType.OBJECT_SEARCH_REQUEST,
-      title: 'Objeto olvidado en vehículo',
-      message: 'Se solicita revisión del vehículo por objeto olvidado.',
-    },
-    {
-      type: NotificationType.OBJECT_SEARCH_IN_PROGRESS,
-      title: 'Búsqueda en progreso',
-      message: 'Un empleado está revisando el vehículo en busca del objeto.',
-    },
-    {
-      type: NotificationType.OBJECT_SEARCH_IN_PROGRESS,
-      title: 'Revisión iniciada',
-      message: 'Se inició la búsqueda del objeto reportado.',
-    },
-    {
-      type: NotificationType.APPROACH_COUNTER,
-      title: 'Cliente en mostrador',
-      message: 'Un cliente se está aproximando al mostrador de atención.',
-    },
-    {
-      type: NotificationType.APPROACH_COUNTER,
-      title: 'Aproximación registrada',
-      message: 'Se detectó aproximación al área de atención al cliente.',
-    },
-  ];
-
-  let count = 0;
-
-  for (let i = 0; i < 30; i++) {
-    const company = randomFrom(companiesArr);
-    const record = randomFrom(allRecords.filter((r) => r.companyId === company.id));
-    const client = randomFrom(clients);
-    const template = notificationTemplates[i % notificationTemplates.length];
-
-    await prisma.notification.create({
-      data: {
-        type: template.type,
-        title: template.title,
-        message: template.message,
-        companyId: company.id,
-        recipientId: null,
-        triggeredById: client.id,
-        isRead: Math.random() < 0.4,
-        data: record ? { parkingRecordId: record.id } : null,
-        createdAt: faker.date.recent({ days: 15 }),
-      },
-    });
-
-    count++;
-  }
-
-  console.log(`${count} notifications creadas.`);
-}
 
 async function seedInvoices(
   prisma: PrismaClient,
@@ -1557,10 +1451,7 @@ async function main(): Promise<void> {
   // 17. Vehicle requests
   await seedVehicleRequests(prisma, allRecords, clients);
 
-  // 18. Notifications
-  await seedNotifications(prisma, companies, clients, allRecords);
-
-  // 19. Company invoices
+  // 18. Company invoices
   await seedInvoices(prisma, billingPlans, paymentMethodsMap, companies);
 
   console.log('\n========== SEED COMPLETADO ==========');
