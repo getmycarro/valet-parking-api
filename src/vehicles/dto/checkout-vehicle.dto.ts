@@ -4,8 +4,9 @@ export class CheckoutVehicleDto {
   @IsOptional()
   checkOutAt?: Date;
 
+  @IsOptional()
   @IsString()
-  checkOutValet: string;
+  checkOutValet?: string;
 
   @IsOptional()
   @IsString()

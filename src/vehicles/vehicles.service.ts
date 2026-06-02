@@ -9,10 +9,15 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { WorkdaysService } from "../workdays/workdays.service";
 import { RegisterVehicleDto } from "./dto/register-vehicle.dto";
 import { CheckoutVehicleDto } from "./dto/checkout-vehicle.dto";
+import { AddMyVehicleDto } from "./dto/add-my-vehicle.dto";
 import { Prisma, ParkingRecordStatus, PaymentStatus, UserRole, NotificationType, WorkdayStatus } from "@prisma/client";
 import { FilterVehiclesDto } from "./dto/filter-vehicles.dto";
 import { UpdateParkingRecordStatusDto } from "./dto/update-parking-record-status.dto";
 import * as bcrypt from "bcrypt";
+
+function normalizeId(id: string): string {
+  return id.trim().replace(/[^0-9]/g, '');
+}
 
 @Injectable()
 export class VehiclesService {
@@ -74,8 +79,14 @@ export class VehiclesService {
         include: { ownedVehicles: true },
       });
     } else if (dto.idNumber) {
-      user = await this.prisma.user.findUnique({
-        where: { idNumber: dto.idNumber },
+      const normalized = normalizeId(dto.idNumber);
+      user = await this.prisma.user.findFirst({
+        where: {
+          OR: [
+            { idNumber: dto.idNumber },
+            { idNumber: normalized },
+          ],
+        },
         include: { ownedVehicles: true },
       });
     } else if (dto.email) {
@@ -145,12 +156,30 @@ export class VehiclesService {
     }
 
     // 3b. Usuario NO existe - crear usuario, vehiculo y parkingRecord
+
+    // Verificar unicidad de email e idNumber antes de intentar crear
+    if (dto.email) {
+      const emailExists = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      if (emailExists) {
+        throw new ConflictException('El correo electrónico ya está registrado en el sistema.');
+      }
+    }
+    if (dto.idNumber) {
+      const normalized = normalizeId(dto.idNumber);
+      const idExists = await this.prisma.user.findFirst({
+        where: { OR: [{ idNumber: dto.idNumber }, { idNumber: normalized }] },
+      });
+      if (idExists) {
+        throw new ConflictException('La cédula de identidad ya está registrada en el sistema.');
+      }
+    }
+
     const password = await bcrypt.hash(dto.idNumber || dto.email, 10);
 
     const newUser = await this.prisma.user.create({
       data: {
         email: dto.email || `${(dto.idNumber ?? '').replace(/\W/g, '')}@noemail.getmycarro.com`,
-        idNumber: dto.idNumber,
+        idNumber: dto.idNumber ? normalizeId(dto.idNumber) : undefined,
         name: dto.name,
         phone: dto.phone || undefined,
         password,
@@ -205,8 +234,14 @@ export class VehiclesService {
   }
 
   async getUserVehicles(idNumber: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { idNumber: idNumber },
+    const normalized = normalizeId(idNumber);
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { idNumber: idNumber },
+          { idNumber: normalized },
+        ],
+      },
       include: { ownedVehicles: true },
     });
 
@@ -455,7 +490,7 @@ export class VehiclesService {
         skip,
         take: limit,
         include,
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: "asc" },
       }),
       this.prisma.parkingRecord.count({ where: { ...whereBase, status: ParkingRecordStatus.UNPAID } }),
       this.prisma.parkingRecord.count({ where: { ...whereBase, status: ParkingRecordStatus.PAYMENT_UNDER_REVIEW } }),
@@ -594,6 +629,33 @@ export class VehiclesService {
     return vehicles.filter((v) => !activePlateSet.has(v.plate));
   }
 
+  async addMyVehicle(dto: AddMyVehicleDto, userId: string) {
+    const plate = dto.plate.trim().toUpperCase();
+
+    // Check if vehicle with this plate already exists
+    const existing = await this.prisma.vehicle.findUnique({
+      where: { plate },
+    });
+
+    if (existing) {
+      if (existing.ownerId === userId) {
+        // Already belongs to this user — return it (idempotent)
+        return existing;
+      }
+      throw new BadRequestException('Esta placa ya está registrada en el sistema.');
+    }
+
+    return this.prisma.vehicle.create({
+      data: {
+        plate,
+        brand: dto.brand,
+        model: dto.model,
+        color: dto.color,
+        ownerId: userId,
+      },
+    });
+  }
+
   async getParkingHistory(userId: string) {
     const records = await this.prisma.parkingRecord.findMany({
       where: { ownerId: userId, status: ParkingRecordStatus.FREE },
@@ -633,3 +695,4 @@ export class VehiclesService {
     });
   }
 }
+

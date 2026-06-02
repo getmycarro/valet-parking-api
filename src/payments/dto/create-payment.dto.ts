@@ -43,4 +43,12 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsString()
   image?: string;
+
+  @IsOptional()
+  @IsNumber()
+  exchangeRate?: number;
+
+  @IsOptional()
+  @IsNumber()
+  amountBs?: number;
 }

@@ -33,6 +33,8 @@ export class PaymentsService {
         parkingRecordId: dto.parkingRecordId,
         paymentMethodId: dto.paymentMethodId,
         amountUSD: dto.amountUSD,
+        exchangeRate: dto.exchangeRate,
+        amountBs: dto.amountBs,
         tip: dto.tip || 0,
         fee: dto.fee,
         validation: dto.validation,

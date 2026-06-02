@@ -13,6 +13,7 @@ import { RegisterVehicleDto } from "./dto/register-vehicle.dto";
 import { CheckoutVehicleDto } from "./dto/checkout-vehicle.dto";
 import { UpdateParkingRecordStatusDto } from "./dto/update-parking-record-status.dto";
 import { FilterVehiclesDto } from "./dto/filter-vehicles.dto";
+import { AddMyVehicleDto } from "./dto/add-my-vehicle.dto";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { UserRole } from "@prisma/client";
@@ -43,12 +44,22 @@ export class VehiclesController {
 
     const result = await this.vehiclesService.registerVehicle(dto, user.id, companyId);
     if (result.isNewUser && dto.email) {
-      await this.email.sendEmail({
-        templateId: emailTemplates.welcomeEmail,
-        to: dto.email,
-      } as any);
+      try {
+        await this.email.sendEmail({
+          templateId: emailTemplates.welcomeEmail,
+          to: dto.email,
+        } as any);
+      } catch {
+        // Email failure is non-critical — parking record already created
+      }
     }
     return result.parkingRecord;
+  }
+
+  @Post("my-vehicle")
+  @Roles(UserRole.CLIENT, UserRole.ADMIN, UserRole.MANAGER, UserRole.ATTENDANT)
+  addMyVehicle(@Body() dto: AddMyVehicleDto, @CurrentUser() user: any) {
+    return this.vehiclesService.addMyVehicle(dto, user.id);
   }
 
   @Patch(":id/checkout")
@@ -110,7 +121,7 @@ export class VehiclesController {
   }
 
   @Get(":id")
-  @Roles(UserRole.ADMIN, UserRole.ATTENDANT)
+  @Roles(UserRole.ADMIN, UserRole.ATTENDANT, UserRole.MANAGER)
   getVehicleById(@Param("id") id: string) {
     return this.vehiclesService.getVehicleById(id);
   }

@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from "class-validator";
+import { IsEmail, IsOptional, IsString } from "class-validator";
 
 export class RegisterVehicleDto {
   @IsOptional()
@@ -6,8 +6,8 @@ export class RegisterVehicleDto {
   idNumber: string;
 
   @IsOptional()
-  @IsString()
-  email: string;
+  @IsEmail()
+  email?: string;
 
   @IsOptional()
   @IsString()

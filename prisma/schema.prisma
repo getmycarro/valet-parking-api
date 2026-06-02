@@ -290,6 +290,8 @@ model PaymentMethod {
 model Payment {
   id              String         @id @default(cuid())
   amountUSD       Float
+  exchangeRate    Float?         // Tasa Bs/USD en el momento del pago
+  amountBs        Float?         // Monto equivalente en Bs
   tip             Float          @default(0) // Propina en USD
   status          PaymentStatus  @default(PENDING)
   date            DateTime       @default(now())
