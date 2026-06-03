@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   UseGuards,
+  BadRequestException,
 } from "@nestjs/common";
 import { EmployeesService } from "./employees.service";
 import { CreateEmployeeDto } from "./dto/create-employee.dto";
@@ -23,7 +24,8 @@ export class EmployeesController {
   @Post()
   @Roles(UserRole.ADMIN)
   create(@Body() dto: CreateEmployeeDto, @CurrentUser() user: any) {
-    const companyId = user.companyUsers?.[0]?.company?.id;
+    const companyId = user.companyId;
+    if (!companyId) throw new BadRequestException('No company associated with this account');
     return this.employeesService.create(dto, companyId);
   }
 
@@ -36,7 +38,7 @@ export class EmployeesController {
 
   @Delete(":id")
   @Roles(UserRole.ADMIN)
-  delete(@Param("id") id: string, @Query("type") type: "VALET" | "ATTENDANT") {
+  delete(@Param("id") id: string, @Query("type") type: "VALET" | "ATTENDANT" | "MANAGER") {
     return this.employeesService.delete(id, type);
   }
 }

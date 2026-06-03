@@ -332,7 +332,7 @@ export class VehiclesService {
           payments: true,
         },
         orderBy: {
-          checkInAt: "desc",
+          updatedAt: "desc",
         },
       });
 
@@ -490,7 +490,7 @@ export class VehiclesService {
         skip,
         take: limit,
         include,
-        orderBy: { createdAt: "asc" },
+        orderBy: { updatedAt: "desc" },
       }),
       this.prisma.parkingRecord.count({ where: { ...whereBase, status: ParkingRecordStatus.UNPAID } }),
       this.prisma.parkingRecord.count({ where: { ...whereBase, status: ParkingRecordStatus.PAYMENT_UNDER_REVIEW } }),
@@ -525,7 +525,7 @@ export class VehiclesService {
         checkInValet: { select: { id: true, name: true, idNumber: true } },
         checkOutValet: { select: { id: true, name: true, idNumber: true } },
       },
-      orderBy: { checkInAt: "desc" },
+      orderBy: { updatedAt: "desc" },
     });
   }
 

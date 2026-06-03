@@ -13,6 +13,10 @@ export class EmployeesService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateEmployeeDto, companyId?: string | null) {
+    if (!companyId) {
+      throw new BadRequestException('companyId is required to create an employee');
+    }
+
     if (dto.type === "ATTENDANT") {
       // Validate email is present for attendants
       if (!dto.email) {
@@ -124,7 +128,7 @@ export class EmployeesService {
     return [...valetRecords, ...usersRecords];
   }
 
-  async delete(id: string, type: "VALET" | "ATTENDANT") {
+  async delete(id: string, type: "VALET" | "ATTENDANT" | "MANAGER") {
     if (type === "VALET") {
       const valet = await this.prisma.valet.findUnique({ where: { id } });
       if (!valet) {
@@ -134,18 +138,19 @@ export class EmployeesService {
       return { message: "Valet deleted successfully" };
     }
 
-    if (type === "ATTENDANT") {
-      const attendant = await this.prisma.user.findUnique({ where: { id } });
-      if (!attendant || attendant.role !== UserRole.ATTENDANT) {
-        throw new NotFoundException("Attendant not found");
+    if (type === "ATTENDANT" || type === "MANAGER") {
+      const employee = await this.prisma.user.findUnique({ where: { id } });
+      if (
+        !employee ||
+        !([UserRole.ATTENDANT, UserRole.MANAGER] as UserRole[]).includes(employee.role as UserRole)
+      ) {
+        throw new NotFoundException("Employee not found");
       }
       await this.prisma.user.update({
         where: { id },
-        data: {
-          deletedAt: new Date(),
-        },
+        data: { deletedAt: new Date() },
       });
-      return { message: "Attendant deleted successfully" };
+      return { message: "Employee deleted successfully" };
     }
 
     throw new BadRequestException("Invalid employee type");
