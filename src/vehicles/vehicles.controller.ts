@@ -40,7 +40,7 @@ export class VehiclesController {
   ) {
     let companyId = dto.companyId;
 
-    if (!companyId && (user.role === UserRole.MANAGER || user.role === UserRole.ATTENDANT)) {
+    if (!companyId && (user.role === UserRole.ADMIN || user.role === UserRole.MANAGER || user.role === UserRole.ATTENDANT)) {
       companyId = user.companyUsers?.[0]?.company?.id;
     }
 
