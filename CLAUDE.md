@@ -40,18 +40,21 @@ npm run format             # prettier
 Ver `.env.example` para plantilla. Variables requeridas:
 
 ```
-DATABASE_URL          # PostgreSQL connection string (Prisma pooled)
-DIRECT_URL            # PostgreSQL direct URL (Prisma migrations)
-JWT_SECRET            # secreto para firmar tokens JWT
-JWT_EXPIRES_IN        # duración token, ej: "7d"
-PORT                  # puerto del servidor (default: 3001)
-NODE_ENV              # development | production
-CORS_ORIGIN           # orígenes permitidos (comma-separated) o "*" para todos
-SUPABASE_URL          # URL del proyecto Supabase
+DATABASE_URL               # PostgreSQL connection string (Prisma pooled)
+DIRECT_URL                 # PostgreSQL direct URL (Prisma migrations)
+JWT_SECRET                 # secreto para firmar tokens JWT
+JWT_EXPIRES_IN             # duración token, ej: "7d"
+PORT                       # puerto del servidor (default: 3001)
+NODE_ENV                   # development | production
+CORS_ORIGIN                # orígenes permitidos (comma-separated) o "*" para todos
+SUPABASE_URL               # URL del proyecto Supabase
 SUPABASE_SERVICE_ROLE_KEY  # service role key de Supabase
-ONESIGNAL_APP_ID      # App ID de OneSignal
-ONESIGNAL_REST_API_KEY    # REST API Key de OneSignal
-SENDGRID_API_KEY      # API Key de SendGrid (para emails)
+ONESIGNAL_APP_ID           # App ID de OneSignal
+ONESIGNAL_REST_API_KEY     # REST API Key de OneSignal
+SENDGRID_API_KEY           # API Key de SendGrid (para emails)
+CLOUDINARY_CLOUD_NAME      # dmsa4uyiq (para futuras operaciones server-side sobre imágenes)
+CLOUDINARY_API_KEY         # Cloudinary API key
+CLOUDINARY_API_SECRET      # Cloudinary API secret
 ```
 
 ## Arquitectura de módulos
@@ -257,6 +260,20 @@ Los modelos con `deletedAt DateTime?` implementan soft delete. Filtrar con `wher
 | GET | `/requests` | ADMIN, MANAGER, ATTENDANT | Listar requests con filtros |
 | PATCH | `/requests/:id/status` | ADMIN, MANAGER, ATTENDANT | Actualizar estado del request |
 
+### Payment References (`/api/payment-references`)
+| Método | Ruta | Roles | Descripción |
+|--------|------|-------|-------------|
+| POST | `/payment-references/:parkingRecordId` | ADMIN, ATTENDANT | Guardar URL de comprobante Cloudinary en BD |
+
+Modelo `PaymentReference`: `id`, `imageUrl` (Cloudinary `secure_url`), `publicId` (opcional), `parkingRecordId`, `uploadedById`, `createdAt`, `updatedAt`. El upload a Cloudinary lo hace el cliente directamente — este endpoint solo persiste la URL resultante.
+
+### Workdays (`/api/workdays`)
+| Método | Ruta | Roles | Descripción |
+|--------|------|-------|-------------|
+| GET | `/workdays/active` | ADMIN, MANAGER, ATTENDANT | Turno activo actual |
+| POST | `/workdays/open` | ADMIN, ATTENDANT | Abrir un nuevo turno |
+| PATCH | `/workdays/:id/close` | ADMIN, ATTENDANT | Cerrar turno activo |
+
 ## Patrones de código
 
 ### Crear un nuevo módulo
@@ -344,18 +361,19 @@ await this.notifications.createAndSend({
 
 ## Integración con clientes
 
-### valet-parking-system (Next.js — admin web)
-- Base URL: `process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'`
-- HTTP: `axios` con interceptor que agrega `Authorization: Bearer <token>` desde `localStorage` (key: `valet_parking_token`)
-- Auto-unwrap del envelope `{ data: ... }` en el interceptor de respuesta
-- Redirige a `/login` en 401
+### Front_getmycarro/app (React/Vite — admin web)
+- Base URL: `import.meta.env.VITE_API_URL || 'http://localhost:3001/api'`
+- HTTP: `axios` con interceptor que agrega `Authorization: Bearer <token>` desde `localStorage` (key: `gmc_token`)
+- Redirige a `/admin` en 401
+- Auth: Firebase email/password → ID token almacenado como `gmc_token` → `GET /auth/me` para obtener el usuario backend
+- SSE: `GET /notifications/stream?token=<gmc_token>` para actualizaciones en tiempo real (token como query param porque `EventSource` no soporta headers)
 
-### valet-parking-app (Expo — app móvil)
-- Base URL hardcodeada: `https://valet-parking-api.onrender.com/api`
-- HTTP: `axios` vía `lib/api.ts`, token vía `setAuthToken(token)`
-- Token almacenado en `expo-secure-store` (nativo) o `localStorage` (web)
-- **No hace unwrap** del envelope — los hooks usan `response.data.data` directamente
-- Timeout: 20 segundos
+### expo/ (React Native — app móvil)
+- Base URL: `process.env.EXPO_PUBLIC_API_URL` (default: `https://valet-parking-api.onrender.com/api`)
+- HTTP: `axios` vía `lib/api.ts`
+- Token almacenado en `expo-secure-store` bajo key `gmc_token`
+- Los screens acceden al payload via `response.data.data` (el envelope no se unwrapea en el interceptor)
+- En 401: token eliminado de secure store, usuario redirigido a login
 
 ### Convención de autenticación
 Todos los clientes envían el JWT como:

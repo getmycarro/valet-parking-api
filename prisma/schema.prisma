@@ -157,6 +157,7 @@ model User {
   ownedVehicles                Vehicle[]              @relation("VehicleOwner")
   payments                     Payment[]              @relation("ProcessedBy")
   registerRecords              ParkingRecord[]        @relation("RegisterRecord")
+  ownedParkingRecords          ParkingRecord[]        @relation("ParkingRecordOwner")
   companyUsers                 CompanyUser[]
   triggeredNotifications       Notification[]         @relation("TriggeredNotifications")
   receivedNotifications        Notification[]         @relation("ReceivedNotifications")
@@ -217,6 +218,7 @@ model ParkingRecord {
 
   // Cliente dueño del vehículo (solo para referencia)
   ownerId String?
+  owner   User?   @relation("ParkingRecordOwner", fields: [ownerId], references: [id])
 
   // Empresa a la que pertenece el registro
   companyId String?

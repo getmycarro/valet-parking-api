@@ -51,4 +51,12 @@ export class FilterVehiclesDto {
   @IsOptional()
   @IsString()
   workdayId?: string;
+
+  @IsOptional()
+  @IsIn(['ticketNumber', 'checkInAt', 'valetName'])
+  sortBy?: 'ticketNumber' | 'checkInAt' | 'valetName';
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc';
 }

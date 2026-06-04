@@ -242,7 +242,7 @@ export class VehiclesService {
           { idNumber: normalized },
         ],
       },
-      include: { ownedVehicles: true },
+      include: { ownedVehicles: { where: { deletedAt: null } } },
     });
 
     if (!user) return null;
@@ -367,6 +367,13 @@ export class VehiclesService {
             idNumber: true,
           },
         },
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            idNumber: true,
+          },
+        },
         payments: {
           orderBy: {
             date: "desc",
@@ -440,12 +447,14 @@ export class VehiclesService {
       where.checkInAt = dateFilter;
     }
 
-    // Global search — plate, brand, model
+    // Global search — plate, brand, model, owner name/idNumber
     if (options.search) {
       const searchOR: Prisma.ParkingRecordWhereInput[] = [
         { plate: { contains: options.search, mode: "insensitive" } },
         { brand: { contains: options.search, mode: "insensitive" } },
         { model: { contains: options.search, mode: "insensitive" } },
+        { owner: { name: { contains: options.search, mode: "insensitive" } } },
+        { owner: { idNumber: { contains: options.search, mode: "insensitive" } } },
       ];
       whereBase.OR = searchOR;
       where.OR = searchOR;
@@ -474,8 +483,16 @@ export class VehiclesService {
       registerRecord: { select: { id: true, name: true, idNumber: true } },
       checkInValet:   { select: { id: true, name: true, idNumber: true } },
       checkOutValet:  { select: { id: true, name: true, idNumber: true } },
+      owner:          { select: { id: true, name: true, idNumber: true } },
       payments: true,
+      vehicleRequests: { where: { status: 'PENDING' }, select: { id: true } },
     } satisfies Prisma.ParkingRecordInclude;
+
+    const orderBy: Prisma.ParkingRecordOrderByWithRelationInput = options.sortBy
+      ? options.sortBy === 'valetName'
+        ? { registerRecord: { name: options.sortOrder ?? 'asc' } }
+        : { [options.sortBy]: options.sortOrder ?? 'asc' }
+      : { updatedAt: 'desc' };
 
     const [
       parkingRecords,
@@ -490,7 +507,7 @@ export class VehiclesService {
         skip,
         take: limit,
         include,
-        orderBy: { updatedAt: "desc" },
+        orderBy,
       }),
       this.prisma.parkingRecord.count({ where: { ...whereBase, status: ParkingRecordStatus.UNPAID } }),
       this.prisma.parkingRecord.count({ where: { ...whereBase, status: ParkingRecordStatus.PAYMENT_UNDER_REVIEW } }),
@@ -498,6 +515,12 @@ export class VehiclesService {
       this.prisma.parkingRecord.count({ where: { ...whereBase, status: ParkingRecordStatus.FREE } }),
       this.prisma.parkingRecord.count({ where }),
     ]);
+
+    parkingRecords.sort((a, b) => {
+      const aHas = (a as any).vehicleRequests?.length > 0 ? 0 : 1;
+      const bHas = (b as any).vehicleRequests?.length > 0 ? 0 : 1;
+      return aHas - bHas;
+    });
 
     return {
       data: parkingRecords,
@@ -516,17 +539,37 @@ export class VehiclesService {
     };
   }
 
-  async getMyActiveParkingRecords(userId: string) {
-    return this.prisma.parkingRecord.findMany({
-      where: { ownerId: userId, status: { not: ParkingRecordStatus.FREE } },
-      include: {
-        payments: true,
-        registerRecord: { select: { id: true, name: true, idNumber: true } },
-        checkInValet: { select: { id: true, name: true, idNumber: true } },
-        checkOutValet: { select: { id: true, name: true, idNumber: true } },
+  async getMyActiveParkingRecords(userId: string, options: { page: number; limit: number }) {
+    const { page, limit } = options;
+    const skip = (page - 1) * limit;
+
+    const [records, total] = await Promise.all([
+      this.prisma.parkingRecord.findMany({
+        where: { ownerId: userId, status: { not: ParkingRecordStatus.FREE } },
+        include: {
+          payments: true,
+          registerRecord: { select: { id: true, name: true, idNumber: true } },
+          checkInValet: { select: { id: true, name: true, idNumber: true } },
+          checkOutValet: { select: { id: true, name: true, idNumber: true } },
+        },
+        orderBy: { updatedAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.parkingRecord.count({
+        where: { ownerId: userId, status: { not: ParkingRecordStatus.FREE } },
+      }),
+    ]);
+
+    return {
+      data: records,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-      orderBy: { updatedAt: "desc" },
-    });
+    };
   }
 
   async updateParkingRecordStatus(id: string, dto: UpdateParkingRecordStatusDto) {
@@ -657,43 +700,61 @@ export class VehiclesService {
     });
   }
 
-  async getParkingHistory(userId: string) {
-    const records = await this.prisma.parkingRecord.findMany({
-      where: { ownerId: userId, status: ParkingRecordStatus.FREE },
-      include: {
-        payments: { select: { amountUSD: true, tip: true } },
-        company: { select: { id: true, name: true, photoUrl: true } },
+  async getParkingHistory(userId: string, options: { page: number; limit: number }) {
+    const { page, limit } = options;
+    const skip = (page - 1) * limit;
+
+    const [records, total] = await Promise.all([
+      this.prisma.parkingRecord.findMany({
+        where: { ownerId: userId, status: ParkingRecordStatus.FREE },
+        include: {
+          payments: { select: { amountUSD: true, tip: true } },
+          company: { select: { id: true, name: true, photoUrl: true } },
+        },
+        orderBy: { checkOutAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.parkingRecord.count({
+        where: { ownerId: userId, status: ParkingRecordStatus.FREE },
+      }),
+    ]);
+
+    return {
+      data: records.map((record) => {
+        const totalPaid = record.payments.reduce(
+          (sum, p) => sum + p.amountUSD + p.tip,
+          0,
+        );
+
+        const checkIn = new Date(record.checkInAt);
+        const checkOut = new Date(record.checkOutAt!);
+        const diffMs = checkOut.getTime() - checkIn.getTime();
+        const totalMinutes = Math.floor(diffMs / 60000);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        const duration = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+        return {
+          id: record.id,
+          plate: record.plate,
+          description: [record.brand, record.model, record.color]
+            .filter(Boolean)
+            .join(" "),
+          totalPaid,
+          checkInAt: record.checkInAt,
+          checkOutAt: record.checkOutAt,
+          duration,
+          company: record.company,
+        };
+      }),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-      orderBy: { checkOutAt: "desc" },
-    });
-
-    return records.map((record) => {
-      const totalPaid = record.payments.reduce(
-        (sum, p) => sum + p.amountUSD + p.tip,
-        0,
-      );
-
-      const checkIn = new Date(record.checkInAt);
-      const checkOut = new Date(record.checkOutAt!);
-      const diffMs = checkOut.getTime() - checkIn.getTime();
-      const totalMinutes = Math.floor(diffMs / 60000);
-      const hours = Math.floor(totalMinutes / 60);
-      const minutes = totalMinutes % 60;
-      const duration = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-
-      return {
-        id: record.id,
-        plate: record.plate,
-        description: [record.brand, record.model, record.color]
-          .filter(Boolean)
-          .join(" "),
-        totalPaid,
-        checkInAt: record.checkInAt,
-        checkOutAt: record.checkOutAt,
-        duration,
-        company: record.company,
-      };
-    });
+    };
   }
 }
 

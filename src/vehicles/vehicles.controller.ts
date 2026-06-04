@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Get,
+  ParseIntPipe,
   Post,
   Patch,
   Param,
@@ -97,14 +99,22 @@ export class VehiclesController {
 
   @Get("my-car")
   @Roles(UserRole.CLIENT)
-  getMyActiveParkingRecords(@CurrentUser() user: any) {
-    return this.vehiclesService.getMyActiveParkingRecords(user.id);
+  getMyActiveParkingRecords(
+    @CurrentUser() user: any,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
+    return this.vehiclesService.getMyActiveParkingRecords(user.id, { page, limit });
   }
 
   @Get("history")
   @Roles(UserRole.CLIENT)
-  getParkingHistory(@CurrentUser() user: any) {
-    return this.vehiclesService.getParkingHistory(user.id);
+  getParkingHistory(
+    @CurrentUser() user: any,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
+    return this.vehiclesService.getParkingHistory(user.id, { page, limit });
   }
 
   // GET /api/vehicles - Listado completo con filtros
