@@ -348,9 +348,11 @@ export class VehiclesService {
       throw new ConflictException("Vehicle already checked out");
     }
 
-    if (parkingRecord.status === ParkingRecordStatus.UNPAID) {
+    if (parkingRecord.status !== ParkingRecordStatus.PAID) {
       throw new BadRequestException(
-        "Vehicle must be paid before checkout",
+        parkingRecord.status === ParkingRecordStatus.PAYMENT_UNDER_REVIEW
+          ? "El pago está en revisión. Debe aprobarse antes de entregar el vehículo."
+          : "El vehículo debe tener el pago aprobado antes de entregarse.",
       );
     }
 
