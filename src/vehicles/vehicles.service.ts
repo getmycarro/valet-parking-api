@@ -54,7 +54,7 @@ export class VehiclesService {
     }
 
     // checkInValetId apunta a Valet (no User), solo asignar si se provee
-    const checkInValetId = dto.valedId || undefined;
+    const checkInValetId = dto.valetId || undefined;
 
     // Look up the active workday for the company (outside the transaction — read-only)
     const activeWorkday = companyId
@@ -123,18 +123,11 @@ export class VehiclesService {
       const ownerId = user.id;
 
       const parkingRecord = await this.prisma.$transaction(async (tx) => {
-        let workdayId: string | undefined;
-        let ticketNumber: number | undefined;
-
-        if (activeWorkday) {
-          const updated = await tx.workday.update({
-            where: { id: activeWorkday.id },
-            data: { lastTicketNumber: { increment: 1 } },
-            select: { lastTicketNumber: true },
-          });
-          workdayId = activeWorkday.id;
-          ticketNumber = updated.lastTicketNumber;
-        }
+        const { workdayId, ticketNumber } = await this.resolveTicketNumber(
+          tx,
+          activeWorkday?.id,
+          dto.ticketNumber,
+        );
 
         return tx.parkingRecord.create({
           data: {
@@ -201,18 +194,11 @@ export class VehiclesService {
     const newUserId = newUser.id;
 
     const parkingRecord = await this.prisma.$transaction(async (tx) => {
-      let workdayId: string | undefined;
-      let ticketNumber: number | undefined;
-
-      if (activeWorkday) {
-        const updated = await tx.workday.update({
-          where: { id: activeWorkday.id },
-          data: { lastTicketNumber: { increment: 1 } },
-          select: { lastTicketNumber: true },
-        });
-        workdayId = activeWorkday.id;
-        ticketNumber = updated.lastTicketNumber;
-      }
+      const { workdayId, ticketNumber } = await this.resolveTicketNumber(
+        tx,
+        activeWorkday?.id,
+        dto.ticketNumber,
+      );
 
       return tx.parkingRecord.create({
         data: {
@@ -231,6 +217,92 @@ export class VehiclesService {
     });
 
     return { parkingRecord, isNewUser: true };
+  }
+
+  /**
+   * Resuelve el ticketNumber para un nuevo ParkingRecord dentro de una transacción.
+   * - Sin workday activo → sin número (comportamiento previo).
+   * - Con número solicitado → valida que esté libre en el turno (status != FREE)
+   *   y ajusta el contador para que los autogenerados futuros no choquen.
+   * - Sin número solicitado → autoincrementa el contador del workday.
+   */
+  private async resolveTicketNumber(
+    tx: Prisma.TransactionClient,
+    activeWorkdayId: string | undefined,
+    requested?: number,
+  ): Promise<{ workdayId: string | undefined; ticketNumber: number | undefined }> {
+    if (!activeWorkdayId) {
+      return { workdayId: undefined, ticketNumber: undefined };
+    }
+
+    if (requested != null) {
+      const inUse = await tx.parkingRecord.findFirst({
+        where: {
+          workdayId: activeWorkdayId,
+          ticketNumber: requested,
+          status: { not: ParkingRecordStatus.FREE },
+        },
+        select: { id: true },
+      });
+      if (inUse) {
+        throw new ConflictException(
+          `El número de ticket ${requested} ya está en uso`,
+        );
+      }
+
+      // Mantener el contador por delante para que los autogenerados no choquen.
+      const workday = await tx.workday.findUnique({
+        where: { id: activeWorkdayId },
+        select: { lastTicketNumber: true },
+      });
+      if (workday && requested > workday.lastTicketNumber) {
+        await tx.workday.update({
+          where: { id: activeWorkdayId },
+          data: { lastTicketNumber: requested },
+        });
+      }
+
+      return { workdayId: activeWorkdayId, ticketNumber: requested };
+    }
+
+    const updated = await tx.workday.update({
+      where: { id: activeWorkdayId },
+      data: { lastTicketNumber: { increment: 1 } },
+      select: { lastTicketNumber: true },
+    });
+    return { workdayId: activeWorkdayId, ticketNumber: updated.lastTicketNumber };
+  }
+
+  /**
+   * Números de ticket actualmente ocupados (vehículos sin entregar) en el
+   * turno activo de la empresa — para sugerir números libres al registrar.
+   */
+  async getActiveTickets(companyId?: string) {
+    const activeWorkday = companyId
+      ? await this.prisma.workday.findFirst({
+          where: { companyId, status: WorkdayStatus.ACTIVE },
+          select: { id: true, lastTicketNumber: true },
+        })
+      : null;
+
+    if (!activeWorkday) {
+      return { used: [], lastTicketNumber: 0 };
+    }
+
+    const records = await this.prisma.parkingRecord.findMany({
+      where: {
+        workdayId: activeWorkday.id,
+        status: { not: ParkingRecordStatus.FREE },
+        ticketNumber: { not: null },
+      },
+      select: { ticketNumber: true },
+      orderBy: { ticketNumber: "asc" },
+    });
+
+    return {
+      used: records.map((r) => r.ticketNumber as number),
+      lastTicketNumber: activeWorkday.lastTicketNumber,
+    };
   }
 
   async getUserVehicles(idNumber: string) {
@@ -588,14 +660,14 @@ export class VehiclesService {
 
     if (
       dto.status === ParkingRecordStatus.PAID &&
-      parkingRecord.status === ParkingRecordStatus.UNPAID
+      parkingRecord.status !== ParkingRecordStatus.PAID
     ) {
       const hasReceivedPayment = parkingRecord.payments.some(
         (p) => p.status === PaymentStatus.RECEIVED,
       );
       if (!hasReceivedPayment) {
         throw new BadRequestException(
-          "Cannot mark as PAID: no confirmed payment found",
+          "No se puede marcar como Pagado: no existe un pago confirmado. Aprueba o registra un pago confirmado primero.",
         );
       }
     }

@@ -91,6 +91,14 @@ export class VehiclesController {
     return this.vehiclesService.getValets();
   }
 
+  // GET /api/vehicles/active-tickets - Números de ticket ocupados en el turno activo
+  @Get("active-tickets")
+  @Roles(UserRole.ADMIN, UserRole.ATTENDANT)
+  getActiveTickets(@CurrentUser() user: any) {
+    const companyId = user.companyId || user.companyUsers?.[0]?.company?.id;
+    return this.vehiclesService.getActiveTickets(companyId);
+  }
+
   @Get("owner/:ownerId")
   @Roles(UserRole.CLIENT)
   getVehiclesByOwnerId(@Param("ownerId") ownerId: string) {
