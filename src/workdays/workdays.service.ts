@@ -12,7 +12,7 @@ import { FilterWorkdaysDto } from './dto/filter-workdays.dto';
 export class WorkdaysService {
   constructor(private prisma: PrismaService) {}
 
-  async openWorkday(userId: string, companyId: string) {
+  async openWorkday(userId: string, companyId: string, valetPrice?: number) {
     // Ensure there is no active workday for this company
     const existing = await this.prisma.workday.findFirst({
       where: { companyId, status: WorkdayStatus.ACTIVE },
@@ -29,6 +29,7 @@ export class WorkdaysService {
         companyId,
         openedById: userId,
         status: WorkdayStatus.ACTIVE,
+        valetPrice: valetPrice ?? null,
       },
       include: {
         openedBy: { select: { id: true, name: true } },
@@ -70,6 +71,37 @@ export class WorkdaysService {
       include: {
         openedBy: { select: { id: true, name: true } },
         closedBy: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  async updateValetPrice(
+    workdayId: string,
+    companyIds: string[],
+    valetPrice?: number,
+  ) {
+    const workday = await this.prisma.workday.findFirst({
+      where: { id: workdayId, companyId: { in: companyIds } },
+    });
+
+    if (!workday) {
+      throw new NotFoundException('Workday not found');
+    }
+
+    if (workday.status === WorkdayStatus.CLOSED) {
+      throw new ConflictException(
+        'No se puede editar la tarifa de una jornada cerrada.',
+      );
+    }
+
+    // Solo afecta el monto sugerido para pagos futuros; los pagos ya
+    // registrados conservan su monto y no se modifican.
+    return this.prisma.workday.update({
+      where: { id: workdayId },
+      data: { valetPrice: valetPrice ?? null },
+      include: {
+        openedBy: { select: { id: true, name: true } },
+        _count: { select: { parkingRecords: true } },
       },
     });
   }

@@ -410,6 +410,7 @@ model Workday {
   openedAt         DateTime      @default(now())
   closedAt         DateTime?
   lastTicketNumber Int           @default(0)
+  valetPrice       Float?
 
   companyId        String
   company          Company       @relation(fields: [companyId], references: [id])

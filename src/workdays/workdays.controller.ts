@@ -12,6 +12,7 @@ import {
 import { Response } from 'express';
 import { WorkdaysService } from './workdays.service';
 import { OpenWorkdayDto } from './dto/open-workday.dto';
+import { UpdateWorkdayPriceDto } from './dto/update-workday-price.dto';
 import { FilterWorkdaysDto } from './dto/filter-workdays.dto';
 import { ReportWorkdaysDto } from './dto/report-workdays.dto';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -29,7 +30,7 @@ export class WorkdaysController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   openWorkday(@Body() body: OpenWorkdayDto, @CurrentUser() user: any) {
     const companyId = body.companyId || user.companyId;
-    return this.workdaysService.openWorkday(user.id, companyId);
+    return this.workdaysService.openWorkday(user.id, companyId, body.valetPrice);
   }
 
   // GET /api/workdays/active — must be declared before /:id
@@ -94,6 +95,19 @@ export class WorkdaysController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
   findOne(@Param('id') id: string) {
     return this.workdaysService.findOne(id);
+  }
+
+  // PATCH /api/workdays/:id/price — editar la tarifa fija de la jornada
+  @Patch(':id/price')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  updateWorkdayPrice(
+    @Param('id') id: string,
+    @Body() body: UpdateWorkdayPriceDto,
+    @CurrentUser() user: any,
+  ) {
+    const companyIds =
+      user.companyUsers?.map((cu: any) => cu.company?.id).filter(Boolean) || [];
+    return this.workdaysService.updateValetPrice(id, companyIds, body.valetPrice);
   }
 
   // PATCH /api/workdays/:id/close
